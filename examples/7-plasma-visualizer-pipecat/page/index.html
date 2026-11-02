@@ -1,0 +1,88 @@
+<!doctype html>
+<!-- Pipecat's Plasma visualizer (voice-ui-kit) on the assistant's audio, filling the page, with a turn-state label under it.
+     Both modules are used as they are: pipecat_plasma.js (the built visualizer) and turn_label.js. Read README-VOICE.md first.
+
+     The original: Plasma from @pipecat-ai/voice-ui-kit 0.14.1 (BSD-2), https://github.com/pipecat-ai/voice-ui-kit
+       source:  https://github.com/pipecat-ai/voice-ui-kit/blob/main/package/src/visualizers/webgl/Plasma.tsx
+       docs:    https://github.com/pipecat-ai/voice-ui-kit/blob/main/docs/content/docs/visualizers/plasma-visualizer.mdx
+     pipecat_plasma.js is that component built for a plain page. Any setting below can be given in mountPlasma's second argument, as effectScale is here:
+       mountPlasma(element, { effectScale: 0.94, color1: "#ff6b6b", ringCount: 4 })
+     Each setting: what it does (from voice-ui-kit's docs), its range, voice-ui-kit's default, and its value on this page.
+
+     Core plasma:
+       intensity               overall brightness and strength of the plasma effect (0.5-3.0); default 1.5; here 2
+       radius                  size of the plasma effect (0.5-3.0); default 1.85; here 0.825
+       effectScale             scaling factor for the entire effect (0.1-2.0); default 0.5; here 0.94
+       effectCenter            centre point of the effect ({ x, y }); default { x: 0, y: 0 }; here default
+       blendMode               colour blending mode (0-5); default 0; here default
+       plasmaSpeed             animation speed of the plasma (0.1-5.0); default 1; here 0.15
+       rayLength               length of the plasma rays (0.1-2.0); default 1; here 0.5
+
+     Rings:
+       ringCount               number of animated rings (0-8); default 3; here default
+       ringVisibility          opacity of the rings (0-1); default 0.6; here 0.6
+       ringDistance            distance between rings (0-0.5); default 0; here 0
+       ringSpread              spacing between rings (0-0.2); default 0.07; here 0.04
+       ringBounce              bouncing animation intensity (0-1); default 0; here 0.2
+       ringThickness           thickness of the ring lines (1-50); default 12; here 6
+       ringThicknessAudio      ring thickness added by the audio (not described in the docs); default 2; here 7.5
+       ringVariance            random variation in the rings (0-1); default 0.64; here 0.175
+       ringSharpness           edge sharpness of the rings (0-1); default 1; here default
+       ringAmplitude           wave amplitude of the rings (0-0.2); default 0.02; here 0.075
+       ringSpeed               animation speed of the rings (0.1-5.0); default 1.2; here default
+       ringSegments            number of segments per ring (1-20); default 5.4; here 6
+       ringColorInheritance    how far the rings take the plasma's colours (0-1); default 1; here default
+
+     Colours:
+       useCustomColors         the three colours below, or rainbow mode (true / false); default true; here default
+       color1                  first colour (hex); default #22d3ee; here #00e5ff
+       color2                  second colour (hex); default #34d399; here #00ff9d
+       color3                  third colour (hex); default #818cf8; here #9b7bff
+       backgroundColor         background colour (hex); default transparent; here #1f2937
+       colorCycleSpeed         speed of the colour transitions (0.1-3.0); default 0.6; here 0.25
+
+     Glow:
+       glowFalloff             how quickly the glow fades (0.1-3.0); default 1; here 1
+       glowThreshold           minimum glow intensity (0-1); default 0; here 0
+
+     Animation:
+       lerpSpeed               how fast a changed setting eases to its new value (not described in the docs); default 0.05; here default
+       audioLerpSpeed          how fast the audio's effect eases (not described in the docs); default 0.069; here default
+
+     Audio:
+       audioEnabled            react to the audio at all (true / false); default true; here true
+       audioSensitivity        audio input sensitivity (0.1-3.0); default 1; here 0.9
+       audioSmoothing          smoothing of the audio data (0.1-1.0); default 0.8; here default
+       frequencyBands          number of frequency bands analysed (8-64); default 32; here default
+       bassResponse            response to bass frequencies (0.1-3.0); default 1.2; here default
+       midResponse             response to middle frequencies (0.1-3.0); default 1; here default
+       trebleResponse          response to treble frequencies (0.1-3.0); default 0.8; here default
+       plasmaVolumeReactivity  how much the volume moves the plasma (0.1-5.0); default 2; here 0.9
+       volumeThreshold         minimum volume that moves anything (0-1); default 0.15; here default
+-->
+<meta charset="utf-8">
+<title>Plasma</title>
+<style>body{margin:0;height:100vh;background:#1f2937;color:#ddd;font:14px system-ui;overflow:hidden}#plasma{position:absolute;inset:0}
+#top{position:absolute;top:8px;left:8px;z-index:2}#turnlabel{position:absolute;bottom:48px;left:50%;transform:translateX(-50%);font:600 18px system-ui;white-space:nowrap}</style>
+<div id="plasma"></div><div id="top"><button id="start">Start</button> <span id="phase">not connected</span></div><div id="turnlabel"></div><div class="kara"></div>
+<script type="module">
+  import "./log.js";                             // the two log streams, in the browser console: recorded events and adapter callbacks, each on its own
+  import { ConnectConversation } from "./ConnectConversation.js";
+  import { Karaoke } from "./karaoke.js";                  // the karaoke, the assistant's words as spoken and the person's as heard
+  import { mountPlasma } from "./pipecat_plasma.js";      // a view with track(): Pipecat's Plasma visualizer on the assistant's audio
+  import { TurnLabel } from "./turn_label.js";             // a view with rtvi(): the turn-state word
+  const plasma = mountPlasma(document.getElementById("plasma"), { effectScale: 0.94 });
+  const label = TurnLabel(document.getElementById("turnlabel"), { hue: 187 });
+  const karaoke = Karaoke([document.querySelector(".kara")], {   // the karaoke's look on this page
+    botFontSize: "22px",                                    // the assistant's line: the largest size of its words
+    botWordsColour: "#8fecff",                              // its words as they are said; those not yet said are slightly dimmer
+    botTextOutline: "0 1px 8px #050a1ee6",                  // the glow that keeps them readable
+    personFontSize: "22px",                                 // the person's line: the largest size of their words
+    personWordsColour: "#caa8fa",                           // their words as they are heard
+    personTextOutline: "0 1px 8px #050a1ee6",               // the glow that keeps them readable
+  });
+  const showPhaseWord = true;                             // show the listening / thinking / speaking word
+  const phaseWordColour = "#dddddd";                      // its colour
+  Object.assign(document.getElementById("phase").style, { display: showPhaseWord ? "" : "none", color: phaseWordColour });
+  document.getElementById("start").onclick = () => ConnectConversation({ way: "voice", phase: "#phase", views: [karaoke, plasma, label] });
+</script>

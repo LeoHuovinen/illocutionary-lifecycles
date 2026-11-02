@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- A Rive character (the Rive web runtime, @rive-app/webgl2) whose mouth follows the assistant's level, filling the page. pipecat_rive.js
+     is used as it is: it wraps the runtime, loads the wasm from vendor/, lists the characters in rive/ and drives each one's mouth
+     input from the level. Over IL's press-to-speak mount: hold the button to speak. examples/6-rive-pipecat is the
+     same page over the Pipecat voice mount. Read README.md in this folder, then README-PRESS.md. -->
+<meta charset="utf-8">
+<title>Rive character</title>
+<style>body{margin:0;height:100vh;background:#e9edf3;color:#223;font:14px system-ui;overflow:hidden}#stage{position:absolute;inset:0}
+#top{position:absolute;top:8px;left:8px;z-index:5}</style>
+<div id="stage"></div><div id="top"><button id="start">Start</button> <button id="talk" disabled>Hold to speak</button> <button id="click-talk" disabled>Click to speak</button> <span id="phase">not connected</span></div><div class="kara"></div>
+<script type="module">
+  import "./log.js";                             // the two log streams, in the browser console: recorded events and adapter callbacks, each on its own
+  import { ConnectConversation } from "./ConnectConversation.js";
+  import { Karaoke } from "./karaoke.js";                  // the karaoke, the assistant's words as spoken and the person's as heard
+  import { mountRive } from "./pipecat_rive.js";          // a view with level(): the character, its mouth on the assistant's level
+  const rive = mountRive(document.getElementById("stage"));
+  const karaoke = Karaoke([document.querySelector(".kara")], {   // the karaoke's look on this page
+    botFontSize: "22px",                                    // the assistant's line: the largest size of its words
+    botWordsColour: "#153779",                              // its words as they are said; those not yet said are slightly dimmer
+    botTextOutline: "0 0 8px #ffffffe6, 0 0 2px #ffffffe6", // the glow that keeps them readable
+    personFontSize: "22px",                                 // the person's line: the largest size of their words
+    personWordsColour: "#12684b",                           // their words as they are heard
+    personTextOutline: "0 0 8px #ffffffe6, 0 0 2px #ffffffe6",   // the glow that keeps them readable
+  });
+  const showPhaseWord = true;                             // show the listening / thinking / speaking word
+  const phaseWordColour = "#222233";                      // its colour
+  Object.assign(document.getElementById("phase").style, { display: showPhaseWord ? "" : "none", color: phaseWordColour });
+  document.getElementById("start").onclick = () => ConnectConversation({ way: "press", talk: "#talk", clickTalk: "#click-talk", phase: "#phase", views: [karaoke, rive] });
+</script>

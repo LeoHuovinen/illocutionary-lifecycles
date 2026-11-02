@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "illocutionary-lifecycles"
+version = "1.1.0"
+description = "Illocutionary Lifecycles: a library for running conversations with a language model"
+requires-python = ">=3.11"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Leo Huovinen"}]
+dependencies = [
+    "openai>=1.12.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/LeoHuovinen/illocutionary-lifecycles"
+
+[project.optional-dependencies]
+# The WebSocket mounts (``illocutionary_lifecycles/server/adapter_mounts/websocket_mounts/``) import
+# FastAPI and run under uvicorn, and uvicorn serves a WebSocket only when the websockets library is
+# installed beside it, so all three are listed. Nothing else in the package needs them.
+text = [
+    "fastapi",
+    "uvicorn",
+    "websockets",
+]
+# The press-to-speak mount (``illocutionary_lifecycles/server/adapter_mounts/websocket_mounts/
+# PressToSpeakAdapterWebsocketMount.py``) transcribes and speaks through Azure's Speech SDK, on top of
+# the ``text`` extra's server.
+press = [
+    "fastapi",
+    "uvicorn",
+    "websockets",
+    "azure-cognitiveservices-speech",
+]
+# Persistence vendors — each ...SaveLoad concrete imports its SDK LAZILY, so the package
+# (and the local-file / cache-only modes) work with none of these installed. Install the
+# extra for the vendor a deployment actually uses.
+cosmos = [
+    "azure-cosmos>=4.5.0",
+]
+# The adapters import nothing from Pipecat. This extra is for a server that puts the library
+# into a Pipecat pipeline, as the WebRTC mount
+# (``illocutionary_lifecycles/server/adapter_mounts/webrtc_mounts/``) does; that pipeline uses the
+# turn-processor and worker APIs of the 1.x line, 1.12 or newer and below 2. The mount also needs
+# Pipecat's ``runner`` (its FastAPI app) and ``webrtc`` (aiortc, the browser transport), so both are
+# in. The example voice servers load the nearest ``.env`` with python-dotenv, so it is in as well.
+pipecat = [
+    "pipecat-ai[silero,azure,runner,webrtc,elevenlabs,openai]>=1.12.0,<2",
+    "python-dotenv",
+]
+local = [
+    "transformers>=4.40",
+    "torch>=2.2",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.4.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["illocutionary_lifecycles*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+# The package names its functions and arguments in CamelCase on purpose, so the naming rules
+# are not selected; the annotation rules are not either.
+select = ["F", "E", "W", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["illocutionary_lifecycles"]

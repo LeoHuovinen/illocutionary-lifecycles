@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- A VRM character (pipecat_vrm.js: its scene and its movements, vrm_motion.js) filling
+     the page, over IL's press-to-speak mount: hold the button to speak. examples/5-vrm-pipecat is the same page over the
+     Pipecat voice mount. Read README.md. -->
+<meta charset="utf-8">
+<title>VRM character, press-to-speak</title>
+<style>body{margin:0;height:100vh;background:#101018;color:#ddd;font:14px system-ui;overflow:hidden}#stage{position:absolute;inset:0}
+#top{position:absolute;top:8px;left:8px;z-index:5}
+#turnlabel{position:absolute;top:44px;left:50%;transform:translateX(-50%);z-index:3;font:600 18px system-ui;white-space:nowrap}</style>
+<div id="stage"></div><div id="top"><button id="start">Start</button> <button id="talk" disabled>Hold to speak</button> <button id="click-talk" disabled>Click to speak</button> <span id="phase">not connected</span></div><div id="turnlabel"></div><div class="kara"></div>
+<script type="module">
+  import "./log.js";                             // the two log streams, in the browser console: recorded events and adapter callbacks, each on its own
+  import { ConnectConversation } from "./ConnectConversation.js";
+  import { Karaoke } from "./karaoke.js";                  // the karaoke, the assistant's words as spoken and the person's as heard
+  import { TurnLabel } from "./turn_label.js";             // a view: the listening / thinking / speaking word above the character
+  import { mountVrm } from "./pipecat_vrm.js";            // a view with level(), phase(), botMessage(): the character
+  const vrm = mountVrm(document.getElementById("stage"));
+  const label = TurnLabel(document.getElementById("turnlabel"), { hue: 195 });
+  const karaoke = Karaoke([document.querySelector(".kara")], {   // the karaoke's look on this page
+    botFontSize: "22px",                                    // the assistant's line: the largest size of its words
+    botWordsColour: "#06516b",                              // its words as they are said; those not yet said are slightly dimmer
+    botTextOutline: "0 0 8px #ffffffe6, 0 0 2px #ffffffe6", // the glow that keeps them readable
+    personFontSize: "22px",                                 // the person's line: the largest size of their words
+    personWordsColour: "#12683d",                           // their words as they are heard
+    personTextOutline: "0 0 8px #ffffffe6, 0 0 2px #ffffffe6",   // the glow that keeps them readable
+  });
+  const showPhaseWord = true;                             // show the listening / thinking / speaking word
+  const phaseWordColour = "#dddddd";                      // its colour
+  Object.assign(document.getElementById("phase").style, { display: showPhaseWord ? "" : "none", color: phaseWordColour });
+  document.getElementById("start").onclick = () => ConnectConversation({ way: "press", talk: "#talk", clickTalk: "#click-talk", phase: "#phase", views: [karaoke, vrm, label] });   // from a click: Safari and iOS want a gesture
+</script>

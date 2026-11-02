@@ -1,0 +1,68 @@
+<!doctype html>
+<!-- Hold a button to speak, over IL's press-to-speak mount, with the assistant's voice as bars twice: simple bars written here
+     (simple_visualizers.js, no library) and LiveKit Agents UI's bars (livekit_bars.js, built from source/livekit_bars.jsx),
+     the dashboard (the step, the answers, the turns) and the karaoke. Read README.md in this folder, then README-PRESS.md.
+
+     Orbs are not shipped; each is on GitHub. Every one is a React component, so it goes on a page the way the LiveKit bars
+     do: copy its file into source/, render it in a mount function that returns a view (as source/livekit_bars.jsx does),
+     build it, and add the view to views below. What each orb takes, from the view methods this mount gives
+     (phase: listening | thinking | speaking, level: 0..1, track: the assistant's audio):
+       OrbKit shader orbs    https://github.com/zzzzshawn/orbkit (orbs/orbs/shdr-11.tsx and the rest)      MIT, except the
+                             XorDev shaders listed in its CREDITS.md, which are non-commercial only
+                             <Shdr11 size={180} state={phase === "thinking" || phase === "speaking" ? phase : "idle"} />
+       ElevenLabs orb        https://github.com/elevenlabs/ui/blob/main/apps/www/registry/elevenlabs-ui/ui/orb.tsx      MIT
+                             <Orb agentState={{ thinking: "thinking", listening: "listening", speaking: "talking" }[phase] ?? null}
+                                  volumeMode="manual" getOutputVolume={() => level} getInputVolume={() => 0} />
+                             (it needs @react-three/fiber and @react-three/drei)
+       CircularWaveform      https://github.com/pipecat-ai/voice-ui-kit/tree/main/package/src/visualizers/CircularWaveform  BSD-2
+                             <CircularWaveform size={160} audioTrack={track} isThinking={phase === "thinking"} />
+       orb-ui                https://github.com/exprmntl/orb-ui      MIT; it drives itself from a Pipecat client, so it runs
+                             only on a Pipecat page that owns that client, not through ConnectConversation
+       Thinking Orb          https://github.com/mahdidavoodi7/expo-thinking-orbs      MIT; React Native (Skia), not a browser page
+     Plasma, Pipecat's shader visualizer, is examples/7-plasma-visualizer-pipecat. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>press to speak</title>
+<style>
+  body{margin:0;background:#0f1117;color:#dddddd;font:14px system-ui}
+  #top{position:sticky;top:0;z-index:3;padding:8px 12px;background:#0f1117}
+  main{display:flex;flex-direction:column;gap:12px;padding:8px 12px 96px}
+  .bars{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+  .bars>div{height:180px;display:grid;place-items:center;background:#171a23;border:1px solid #262b38;border-radius:10px;overflow:hidden}
+  table{border-collapse:collapse} td,th{border:1px solid #ffffff33;padding:3px 8px;text-align:left;vertical-align:top} h3{margin:12px 0 4px}
+</style>
+<div id="top"><button id="start">Start</button> <button id="talk" disabled>Hold to speak</button> <button id="click-talk" disabled>Click to speak</button> <span id="phase">not connected</span></div>
+<main>
+  <div class="bars"><div id="simple-bars"></div><div id="livekit-bars"></div></div>
+  <div><h3>Step <span id="step">–</span></h3>
+    <h3>Answers</h3><table id="answers"><tr><th>choice</th><th>answer</th></tr></table>
+    <h3>Turns</h3><table id="turns"><tr><th>who</th><th>said</th></tr></table></div>
+</main><div class="kara" style="position:fixed"></div>
+<script type="module">
+  import "./log.js";                             // the two log streams, in the browser console: recorded events and adapter callbacks, each on its own
+  import { ConnectConversation } from "./ConnectConversation.js";
+  import { Karaoke } from "./karaoke.js";                  // the karaoke, the assistant's words as spoken and the person's as heard
+  import { Bars } from "./simple_visualizers.js";                        // a view written here: track, phase
+  import { mountLiveKitBars } from "./livekit_bars.js";                  // a view: LiveKit Agents UI's bars, used as they are
+  const element = (id) => document.getElementById(id);
+  const rows = (id, list, cells) => { const t = element(id); t.innerHTML = t.rows[0].outerHTML + list.map((x) => `<tr>${cells(x).map((c) => `<td>${c}</td>`).join("")}</tr>`).join(""); };
+  const answers = new Map(), turns = [];
+  const said = (who, text) => { if (turns.at(-1)?.[0] === who) turns.at(-1)[1] += " " + text; else turns.push([who, text]); rows("turns", turns, (t) => t); };
+  const dashboard = { adapterCallback(e) {                                        // a view: the step and the answers, from the adapter callbacks
+    if (e.type === "ConversationStateChangedAdapterCallbackHandlerEvent") element("step").textContent = `${e.conversation_state} ${e.conversation_state_name}`;
+    if (e.type === "QuestionAnsweredAdapterCallbackHandlerEvent") { answers.set(e.AnalyzerInstance + e.answer, e); rows("answers", [...answers.values()], (a) => [a.choice, a.answer]); } } };
+  const visualizers = [Bars(element("simple-bars")), mountLiveKitBars(element("livekit-bars"))];
+  const karaoke = Karaoke([document.querySelector(".kara")], {   // the karaoke's look on this page
+    botFontSize: "22px",                                    // the assistant's line: the largest size of its words
+    botWordsColour: "#84f5e6",                              // its words as they are said; those not yet said are slightly dimmer
+    botTextOutline: "0 1px 6px #000000a6",                  // the glow that keeps them readable
+    personFontSize: "22px",                                 // the person's line: the largest size of their words
+    personWordsColour: "#94ffb7",                           // their words as they are heard
+    personTextOutline: "0 1px 6px #000000a6",               // the glow that keeps them readable
+  });
+  const showPhaseWord = true;                             // show the listening / thinking / speaking word
+  const phaseWordColour = "#dddddd";                      // its colour
+  Object.assign(element("phase").style, { display: showPhaseWord ? "" : "none", color: phaseWordColour });
+  element("start").onclick = () => ConnectConversation({ way: "press", talk: "#talk", clickTalk: "#click-talk", phase: "#phase",   // from a click: Safari and iOS want a gesture
+    onUserMessage: (t) => said("user", t), onBotMessage: (t) => said("assistant", t), views: [karaoke, dashboard, ...visualizers] });
+</script>

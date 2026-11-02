@@ -1,0 +1,20 @@
+<!doctype html>
+<!-- The pages server.py names, side by side, over one conversation: this page holds the connection, each page joins it.
+     Read README.md. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">   <!-- a phone gets its own width, so "auto" stacks the pages -->
+<title>side by side</title>
+<style>body{margin:0;height:100vh;display:flex;flex-direction:column;background:#101018;color:#ddd;font:14px system-ui}
+#top{padding:6px 8px;position:sticky;top:0;z-index:2;background:#101018}#pages{flex:1;min-height:0;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px}
+/* stacked: one page under another, each most of the screen's height, and the side-by-side page scrolls (phones) */
+body.stacked{height:auto} body.stacked #pages{grid-auto-flow:row;grid-auto-rows:85vh}
+@media (max-width:800px){body.auto{height:auto} body.auto #pages{grid-auto-flow:row;grid-auto-rows:85vh}}</style>
+<div id="top"><button id="start">Start</button> <span id="phase">not connected</span></div><div id="pages"></div>
+<script type="module">
+  import "./log.js";                             // the two log streams, in the browser console: recorded events and adapter callbacks, each on its own
+  import { ShowSideBySide } from "./side_by_side.js";
+  const setup = await (await fetch("side-by-side.json")).json();   // the pages, the mount and the layout, from server.py
+  document.body.className = { "side by side": "", stacked: "stacked", auto: "auto" }[setup.layout] ?? "auto";
+  const sideBySide = ShowSideBySide(document.getElementById("pages"), setup);
+  document.getElementById("start").onclick = () => sideBySide.start(document.getElementById("phase"));   // from a click: Safari and iOS want a gesture
+</script>

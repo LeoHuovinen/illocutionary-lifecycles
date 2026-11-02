@@ -1,0 +1,81 @@
+<!doctype html>
+<!-- The chatbot visual kiosk: the conversation's current step shown as picture cards, one card per choice, over IL's
+     press-to-speak mount (hold the button to speak). The assistant's line is a chat bubble above the cards, the person's answer a
+     reply bubble below; the card the person names lights up and the others step back; when the conversation moves on, the
+     chosen card shrinks into the "last choice" picture at the top. node_pictures.js draws it, used as it is.
+
+     The original: daisyUI 4.12.24 (MIT), https://github.com/saadeghi/daisyui, served from vendor/daisyui-4.12.24.full.min.css.
+       chat bubbles:  https://v4.daisyui.com/components/chat/
+       cards:         https://v4.daisyui.com/components/card/
+       themes:        https://v4.daisyui.com/docs/themes/
+     The view renders inside its own shadow root, so daisyUI's styles reach the view and nothing else on the page.
+
+     The settings, NodePictures(element, { design, pictures, theme }):
+       design    the design of the conversation, already loaded (the
+                 object, not the file name). Here: design.json.
+       pictures  an object (or a file) naming a picture for each choice and for each step without choices; below. Here:
+                 the object in the call further down this page.
+       theme     the colour theme it starts in; the view's own menu switches it while it runs. One of cupcake, bumblebee,
+                 valentine, lemonade, garden, retro, pastel, fantasy (daisyUI's own themes). Default cupcake; here cupcake.
+
+     To use your own conversation, change these four things.
+
+       flow.json       replace the whole file with your own PromptBlocks and ConversationStates, in the same form
+       design.json     replace the whole file with nodes and edges matching those ConversationStates, in the form shown in node_pictures.js
+       img/            add your pictures
+       pictures: { }   in the NodePictures call below, write one row per picture, from your design.json
+
+     Which row to write.
+
+       what you see in design.json                row to write in pictures: { }
+       a step whose "options" list has text       one row per option, left side the option's text copied exactly,
+                                                  right side the path of your picture in img/
+       a step whose "options" list is empty,      one row, left side the step's "id" copied exactly,
+       or that has no "questions"                 right side the path of your picture in img/,
+                                                  or no row if the step should show no picture
+
+     After any change to ConversationStates, replace both flow.json and design.json.
+
+     Its pictures are from Wikimedia Commons,
+     pizza.jpg by Shisma (CC BY 4.0), fries.jpg by Acabashi (CC BY-SA 4.0), topping.jpg by Fabryx98 (CC BY-SA 4.0) and
+     burger.jpg from the U.S. National Cancer Institute (public domain).
+
+     When a card lights: as soon as the person's final words name exactly one of the step's choices, before the
+     conversation's own answer arrives; the answer then confirms it, or moves the light to the card it names.
+     As a view of ConnectConversation it takes start(), adapterCallback() (the step changes and the answers),
+     botMessage() (the assistant's bubble) and userMessage() (the person's bubble and the early light). -->
+<meta charset="utf-8">
+<title>chatbot visual kiosk</title>
+<style>body{margin:0;height:100vh;background:#151a24;color:#ddd;font:14px system-ui;overflow:hidden}#view{position:absolute;inset:0}
+#top{position:absolute;top:8px;left:8px;z-index:2}</style>
+<div id="view"></div><div id="top"><button id="start">Start</button> <button id="talk" disabled>Hold to speak</button> <button id="click-talk" disabled>Click to speak</button> <span id="phase">not connected</span></div><div class="kara"></div>
+<script type="module">
+  import "./log.js";                             // the two log streams, in the browser console: recorded events and adapter callbacks, each on its own
+  import { ConnectConversation } from "./ConnectConversation.js";
+  import { Karaoke } from "./karaoke.js";                  // the karaoke, the assistant's words as spoken and the person's as heard
+  import { NodePictures } from "./node_pictures.js";      // a view: start(), adapterCallback(), userMessage(), botMessage()
+  const design = await (await fetch("design.json")).json();
+  const pictures = await NodePictures(document.getElementById("view"), {
+    design,
+    pictures: {
+      "Pizza": "img/pizza.jpg",
+      "Burger": "img/burger.jpg",
+      "Yes": "img/fries.jpg",
+      "No": "img/burger.jpg",
+      "pizza": "img/topping.jpg",
+    },
+    theme: "cupcake",
+  });
+  const karaoke = Karaoke([document.querySelector(".kara")], {   // the karaoke's look on this page
+    botFontSize: "22px",                                    // the assistant's line: the largest size of its words
+    botWordsColour: "#8b1852",                              // its words as they are said; those not yet said are slightly dimmer
+    botTextOutline: "0 0 8px #fffffff2, 0 0 2px #fffffff2", // the glow that keeps them readable
+    personFontSize: "22px",                                 // the person's line: the largest size of their words
+    personWordsColour: "#12685a",                           // their words as they are heard
+    personTextOutline: "0 0 8px #fffffff2, 0 0 2px #fffffff2",   // the glow that keeps them readable
+  });
+  const showPhaseWord = true;                             // show the listening / thinking / speaking word
+  const phaseWordColour = "#dddddd";                      // its colour
+  Object.assign(document.getElementById("phase").style, { display: showPhaseWord ? "" : "none", color: phaseWordColour });
+  document.getElementById("start").onclick = () => ConnectConversation({ way: "press", talk: "#talk", clickTalk: "#click-talk", phase: "#phase", views: [karaoke, pictures] });
+</script>
