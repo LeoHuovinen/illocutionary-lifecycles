@@ -52,11 +52,11 @@ Each example's README gives the library versions and licences and how to rebuild
 
 <table>
   <tr>
-    <td width="50%"><img alt="Pipecat's Plasma visualizer drawing the assistant's audio" src="readme-screenshots/plasma.png" width="100%"></td>
+    <td width="50%"><img alt="Pipecat's Plasma visualizer changing its state between listening, thinking and speaking, each with its own shape and colour, with the state's name written above it" src="readme-screenshots/plasma.gif" width="100%"></td>
     <td width="50%"><img alt="Audio bars above tables of the current step, the answers and the turns" src="readme-screenshots/press-to-speak.png" width="100%"></td>
   </tr>
   <tr>
-    <td align="center"><sub><a href="examples/7-plasma-visualizer-pipecat"><code>7-plasma-visualizer-pipecat</code></a>, Pipecat's Plasma visualizer on the assistant's audio.</sub></td>
+    <td align="center"><sub><a href="examples/7-plasma-visualizer-pipecat"><code>7-plasma-visualizer-pipecat</code></a>. Pipecat's Plasma visualizer changes its state between listening, thinking and speaking on the RTVI events.</sub></td>
     <td align="center"><sub><a href="examples/2-press-to-speak"><code>2-press-to-speak</code></a>, hold a button to speak, with the step, the answers and the turns as tables.</sub></td>
   </tr>
   <tr>
