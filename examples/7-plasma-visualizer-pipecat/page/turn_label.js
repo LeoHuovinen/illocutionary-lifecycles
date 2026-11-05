@@ -22,7 +22,7 @@
 const THINK_AFTER_SILENCE_MS = 750;
 const LBL_IN = 500, LBL_HOLD = 1000, LBL_OUT = 2000;
 
-export function TurnLabel(element, { hue = 187, sat = 80, light = 60 } = {}) {
+export function TurnLabel(element, { hue = 187, sat = 80, light = 60, hues = {} } = {}) {   // hues: a hue per state, e.g. { thinking: 270 }
   let raw = "idle", silenceTimer = 0, replyImminent = false, drivenByRtvi = false;
   const L = { state: null, t0: 0, a0: 0, rawPrev: null, imm: undefined };
 
@@ -58,7 +58,7 @@ export function TurnLabel(element, { hue = 187, sat = 80, light = 60 } = {}) {
     else s = Math.max(0, s - 22);
     if (element.textContent !== word) element.textContent = word;
     element.style.opacity = alpha;
-    element.style.color = `hsl(${hue} ${s}% ${l}%)`;
+    element.style.color = `hsl(${hues[state] ?? hue} ${s}% ${l}%)`;
   })();
 
   return {

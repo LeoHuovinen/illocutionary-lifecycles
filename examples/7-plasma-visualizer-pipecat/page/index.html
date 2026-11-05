@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Pipecat's Plasma visualizer (voice-ui-kit) on the assistant's audio, filling the page, with a turn-state label under it.
+<!-- Pipecat's Plasma visualizer (voice-ui-kit) on the assistant's audio, filling the page, with a turn-state label above it.
      Both modules are used as they are, pipecat_plasma.js (which imports the visualizer from esm.sh) and turn_label.js. Read README-VOICE.md first.
 
      The original: Plasma from @pipecat-ai/voice-ui-kit 0.14.1 (BSD-2), https://github.com/pipecat-ai/voice-ui-kit
@@ -63,16 +63,18 @@
 <meta charset="utf-8">
 <title>Plasma</title>
 <style>body{margin:0;height:100vh;background:#1f2937;color:#ddd;font:14px system-ui;overflow:hidden}#plasma{position:absolute;inset:0}
-#top{position:absolute;top:8px;left:8px;z-index:2}#turnlabel{position:absolute;bottom:48px;left:50%;transform:translateX(-50%);font:600 18px system-ui;white-space:nowrap}</style>
+#top{position:absolute;top:8px;left:8px;z-index:2}#turnlabel{position:absolute;top:28px;left:50%;transform:translateX(-50%);font:600 44px "Quicksand","Nunito","Comfortaa","Segoe UI Rounded",ui-rounded,system-ui,sans-serif;white-space:nowrap;z-index:1;text-shadow:0 0 7px rgba(0,0,0,0.6)}</style>
 <div id="plasma"></div><div id="top"><button id="start">Start</button> <span id="phase">not connected</span></div><div id="turnlabel"></div><div class="kara"></div>
 <script type="module">
   import "./log.js";                             // the two log streams, in the browser console: recorded events and adapter callbacks, each on its own
   import { ConnectConversation } from "./ConnectConversation.js";
   import { Karaoke } from "./karaoke.js";                  // the karaoke, the assistant's words as spoken and the person's as heard
-  import { mountPlasma } from "./pipecat_plasma.js";      // a view with track(): Pipecat's Plasma visualizer on the assistant's audio
+  import { mountPlasma, PLASMA_TURN_HUES } from "./pipecat_plasma.js";   // a view with track(): Pipecat's Plasma visualizer on the assistant's audio
+  import { RTVI_States } from "./RTVI_States.js";          // a view with rtvi(): the plasma's look per turn state
   import { TurnLabel } from "./turn_label.js";             // a view with rtvi(): the turn-state word
-  const plasma = mountPlasma(document.getElementById("plasma"), { effectScale: 0.94 });
-  const label = TurnLabel(document.getElementById("turnlabel"), { hue: 187 });
+  const plasma = mountPlasma(document.getElementById("plasma"), { effectScale: 0.94, lerpSpeed: 0.04 });
+  const states = RTVI_States(plasma);
+  const label = TurnLabel(document.getElementById("turnlabel"), { hue: 187, hues: PLASMA_TURN_HUES });
   const karaoke = Karaoke([document.querySelector(".kara")], {   // the karaoke's look on this page
     botFontSize: "22px",                                    // the assistant's line: the largest size of its words
     botWordsColour: "#8fecff",                              // its words as they are said; those not yet said are slightly dimmer
@@ -84,5 +86,5 @@
   const showPhaseWord = true;                             // show the listening / thinking / speaking word
   const phaseWordColour = "#dddddd";                      // its colour
   Object.assign(document.getElementById("phase").style, { display: showPhaseWord ? "" : "none", color: phaseWordColour });
-  document.getElementById("start").onclick = () => ConnectConversation({ way: "voice", phase: "#phase", views: [karaoke, plasma, label] });
+  document.getElementById("start").onclick = () => ConnectConversation({ way: "voice", phase: "#phase", views: [karaoke, plasma, states, label] });
 </script>
