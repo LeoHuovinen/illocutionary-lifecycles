@@ -1,11 +1,11 @@
 <!doctype html>
 <!-- Pipecat's Plasma visualizer (voice-ui-kit) on the assistant's audio, filling the page, with a turn-state label under it.
-     Both modules are used as they are: pipecat_plasma.js (the built visualizer) and turn_label.js. Read README-VOICE.md first.
+     Both modules are used as they are, pipecat_plasma.js (which imports the visualizer from esm.sh) and turn_label.js. Read README-VOICE.md first.
 
      The original: Plasma from @pipecat-ai/voice-ui-kit 0.14.1 (BSD-2), https://github.com/pipecat-ai/voice-ui-kit
        source:  https://github.com/pipecat-ai/voice-ui-kit/blob/main/package/src/visualizers/webgl/Plasma.tsx
        docs:    https://github.com/pipecat-ai/voice-ui-kit/blob/main/docs/content/docs/visualizers/plasma-visualizer.mdx
-     pipecat_plasma.js is that component built for a plain page. Any setting below can be given in mountPlasma's second argument, as effectScale is here:
+     pipecat_plasma.js imports that component for a plain page and holds this page's settings. Any setting below can be given in mountPlasma's second argument, as effectScale is here:
        mountPlasma(element, { effectScale: 0.94, color1: "#ff6b6b", ringCount: 4 })
      Each setting: what it does (from voice-ui-kit's docs), its range, voice-ui-kit's default, and its value on this page.
 

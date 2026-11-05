@@ -1,6 +1,7 @@
 # Pipecat's Plasma visualizer on the assistant's voice
 
-Pipecat's Plasma visualizer (from `@pipecat-ai/voice-ui-kit`, as built into `page/pipecat_plasma.js`) fills the page and
+Pipecat's Plasma visualizer (`@pipecat-ai/voice-ui-kit` 0.14.1, which `page/pipecat_plasma.js` imports from esm.sh with React
+18.3.1, so there is no bundle to rebuild) fills the page and
 moves with the assistant's audio. Under it are the turn-state word (listening, thinking, speaking) from
 `page/turn_label.js` and the karaoke from `page/karaoke.js`. The page runs on the voice server of `../README-VOICE.md`. Plasma
 draws the assistant's audio track through its `track()` method, which the press-to-speak mount also gives, and the label
