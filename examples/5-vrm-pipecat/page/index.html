@@ -6,7 +6,7 @@
 <title>VRM character, Pipecat</title>
 <style>body{margin:0;height:100vh;background:#101018;color:#ddd;font:14px system-ui;overflow:hidden}#stage{position:absolute;inset:0}
 #top{position:absolute;top:8px;left:8px;z-index:5}
-#turnlabel{position:absolute;top:44px;left:50%;transform:translateX(-50%);z-index:3;font:600 18px system-ui;white-space:nowrap}</style>
+#turnlabel{position:absolute;top:28px;left:50%;transform:translateX(-50%);z-index:3;font:600 44px "Quicksand","Nunito","Comfortaa","Segoe UI Rounded",ui-rounded,system-ui,sans-serif;white-space:nowrap;text-shadow:0 0 7px rgba(0,0,0,0.6)}</style>
 <div id="stage"></div><div id="top"><button id="start">Start</button> <span id="phase">not connected</span></div><div id="turnlabel"></div><div class="kara"></div>
 <script type="module">
   import "./log.js";                             // the two log streams, in the browser console: recorded events and adapter callbacks, each on its own
@@ -14,7 +14,9 @@
   import { Karaoke } from "./karaoke.js";                  // the karaoke, the assistant's words as spoken and the person's as heard
   import { TurnLabel } from "./turn_label.js";             // a view: the listening / thinking / speaking word above the character
   import { mountVrm } from "./pipecat_vrm.js";            // a view with level(), phase(), botMessage(): the character
+  import { RTVI_States } from "./RTVI_States.js";          // a view with rtvi(): the character's movements per turn state
   const vrm = mountVrm(document.getElementById("stage"));
+  const states = RTVI_States(vrm);
   const label = TurnLabel(document.getElementById("turnlabel"), { hue: 195 });
   const karaoke = Karaoke([document.querySelector(".kara")], {   // the karaoke's look on this page
     botFontSize: "22px",                                    // the assistant's line: the largest size of its words
@@ -27,5 +29,5 @@
   const showPhaseWord = true;                             // show the listening / thinking / speaking word
   const phaseWordColour = "#dddddd";                      // its colour
   Object.assign(document.getElementById("phase").style, { display: showPhaseWord ? "" : "none", color: phaseWordColour });
-  document.getElementById("start").onclick = () => ConnectConversation({ way: "voice", phase: "#phase", views: [karaoke, vrm, label] });   // from a click: Safari and iOS want a gesture
+  document.getElementById("start").onclick = () => ConnectConversation({ way: "voice", phase: "#phase", views: [karaoke, vrm, states, label] });   // from a click: Safari and iOS want a gesture
 </script>

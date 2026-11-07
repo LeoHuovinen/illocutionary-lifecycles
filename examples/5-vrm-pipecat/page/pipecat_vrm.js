@@ -4,6 +4,7 @@
 //   import { mountVrm } from "./pipecat_vrm.js";
 //   const vrm = mountVrm(element);              // the menu of the models in vrm/, the first one loaded
 //   views: [vrm]                                // in ConnectConversation: level(l), phase(p), botMessage(text), adapterCallback(e)
+//   views: [vrm, RTVI_States(vrm)]              // on the Pipecat voice mount: turnState(s) from RTVI_States.js replaces phase(p)
 //
 // No model is shipped: VRM_MODELS names each one with its download address, README.md gives the command that fetches
 // them into vrm/, and the menu lists only the files found there. three.js and three-vrm are imported from esm.sh (both MIT).
@@ -32,7 +33,7 @@ export function mountVrm(element) {
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(28, 1, 0.1, 20);
   scene.add(new THREE.DirectionalLight(0xffffff, Math.PI).translateZ(1).translateY(1), new THREE.AmbientLight(0xffffff, 0.6));
   const loader = new GLTFLoader(); loader.register((parser) => new VRMLoaderPlugin(parser));
-  let vrm = null, level = 0;
+  let vrm = null, level = 0, turnStates = false;   // turnStates: RTVI_States.js has taken over from phase()
   const motion = VrmMotion();
   const load = (url) => {
     if (vrm) { scene.remove(vrm.scene); VRMUtils.deepDispose(vrm.scene); vrm = null; }
@@ -67,7 +68,8 @@ export function mountVrm(element) {
 
   return {
     level: (l) => { level = l; },               // the assistant's audio level, 0..1: the mouth
-    phase: (p) => motion.phase(p),              // listening | thinking | speaking: the head and the eyes
+    phase: (p) => { if (!turnStates) motion.phase(p); },   // listening | thinking | speaking: the head and the eyes
+    turnState: (s) => { turnStates = true; motion.phase(s); },   // idle | listening | thinking | speaking, from RTVI_States.js
     botMessage: (t) => motion.text(t),          // the assistant's words: punctuation starts a glance
     // The "motion" incremental phrase instance of flow.json, read while the person speaks: "nod at me", "shake your
     // head", "look left" move the character at once.
