@@ -22,7 +22,6 @@ No VRM or Rive character is shipped. Each example's `README.md` gives the downlo
 | Files | What is inside | Licence text |
 |---|---|---|
 | `pipecat-client.js` in `examples/5-vrm-pipecat/page/`, `6-rive-pipecat/page/`, `7-plasma-visualizer-pipecat/page/` and `8-side-by-side/page/` | `@pipecat-ai/client-js` 1.13.1, `@pipecat-ai/small-webrtc-transport`, `@daily-co/daily-js` 0.90.0, `bowser`, `events`, `lodash`, `uuid` | below |
-| `vrm.js` in `examples/3-vrm-press-to-speak/page/` and `5-vrm-pipecat/page/` | `three` r180, `@pixiv/three-vrm` 3.5.5 and its parts | below |
 | `pipecat_rive.js` and `vendor/rive-2.44.2.wasm` in `examples/4-rive-press-to-speak/page/` and `6-rive-pipecat/page/` | `@rive-app/webgl2` 2.44.2 | below |
 | `livekit_bars.js` in `examples/2-press-to-speak/page/` | a port of LiveKit Agents UI's bar visualizer, `react`, `react-dom`, `scheduler` | below, and `examples/2-press-to-speak/source/livekit/LICENSE` and `NOTICE` for LiveKit |
 | `vendor/daisyui-4.12.24.full.min.css` in `examples/1-chatbot-visual-kiosk/page/` | daisyUI 4.12.24 | `LICENSE-daisyui.txt` beside the file |
@@ -30,6 +29,8 @@ No VRM or Rive character is shipped. Each example's `README.md` gives the downlo
 ## Libraries loaded when a page opens
 
 `pipecat_plasma.js` in `examples/7-plasma-visualizer-pipecat/page/` bundles nothing. When the page opens, it imports `@pipecat-ai/voice-ui-kit` 0.14.1, `react` 18.3.1 and `react-dom` 18.3.1 from esm.sh, and those bring their own dependencies. Each stays under its own licence, and `LICENSE-voice-ui-kit.txt` beside the file gives voice-ui-kit's.
+
+`pipecat_vrm.js` in `examples/3-vrm-press-to-speak/page/` and `5-vrm-pipecat/page/` bundles nothing. When the page opens, it imports `three` 0.180.0 (r180) with its `GLTFLoader` and `@pixiv/three-vrm` 3.5.5 from esm.sh, and those bring their own dependencies. Each stays under its own licence, and the texts for three.js and three-vrm are below.
 
 ## Licence texts
 

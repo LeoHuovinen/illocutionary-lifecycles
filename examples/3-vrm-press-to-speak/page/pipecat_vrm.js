@@ -6,8 +6,10 @@
 //   views: [vrm]                                // in ConnectConversation: level(l), phase(p), botMessage(text), adapterCallback(e)
 //
 // No model is shipped: VRM_MODELS names each one with its download address, README.md gives the command that fetches
-// them into vrm/, and the menu lists only the files found there. three.js and three-vrm come bundled in vrm.js (both MIT).
-import { THREE, GLTFLoader, VRMLoaderPlugin, VRMUtils } from "./vrm.js";
+// them into vrm/, and the menu lists only the files found there. three.js and three-vrm are imported from esm.sh (both MIT).
+import * as THREE from "https://esm.sh/three@0.180.0";
+import { GLTFLoader } from "https://esm.sh/three@0.180.0/examples/jsm/loaders/GLTFLoader.js";
+import { VRMLoaderPlugin, VRMUtils } from "https://esm.sh/@pixiv/three-vrm@3.5.5?deps=three@0.180.0";
 import { VrmMotion } from "./vrm_motion.js";
 
 // VRoid Project's sample avatars: anyone may use, change and pass them on, with no credit (each model's own licence data).

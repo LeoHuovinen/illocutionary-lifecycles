@@ -13,7 +13,7 @@ Exactly the press-to-speak server of `README-PRESS.md` or the Pipecat voice serv
 The quickest way is the examples' own view, `pipecat_vrm.js`: a character as one view, with a menu of the
 models in `vrm/` beside the page and a warning when there is none. Copy into your `page/` folder, from
 `examples/3-vrm-press-to-speak/page/` (press-to-speak) or `examples/5-vrm-pipecat/page/` (Pipecat voice):
-`pipecat_vrm.js`, `vrm_motion.js`, `vrm.js`, `ConnectConversation.js`, `log.js`, and the mount's script
+`pipecat_vrm.js`, `vrm_motion.js`, `ConnectConversation.js`, `log.js`, and the mount's script
 (`PressToSpeakAdapterWebsocketMount.js`, or `PipecatVoiceAdapterWebRtcMount.js` with `pipecat-client.js`). Then:
 
 ```html
@@ -41,10 +41,9 @@ Or write `page/index.html` from three-vrm's own page, not copied here: from "How
 three.js's first page does, `https://github.com/mrdoob/three.js/blob/r180/manual/en/creating-a-scene.html`. Then make
 these changes:
 
-1. **The import.** Their import map and two imports (`three`, `@pixiv/three-vrm`) become one line:
-   `import { THREE, GLTFLoader, VRMLoaderPlugin, VRMUtils } from "./vrm.js";` — three.js and three-vrm bundled as
-   one ES module, copied beside the page from either VRM example; those four names are what it exports. No import map,
-   no `three` package, no `@pixiv/three-vrm` package on the page.
+1. **The import.** Their import map and two imports (`three`, `@pixiv/three-vrm`) become the three import lines at the
+   top of `pipecat_vrm.js`, which take three.js r180, its `GLTFLoader` and three-vrm 3.5.5 from esm.sh, with
+   `?deps=three@0.180.0` so that three-vrm uses the same three.js. No import map on the page.
 2. **The conversation.** Copy `ConnectConversation.js`, `log.js` and the mount's script beside the page as above, and add
    `import { ConnectConversation } from "./ConnectConversation.js";`, a `<button id="start">Start</button>`, for
    press-to-speak a `<button id="talk">Hold to speak</button>`, and a `<span id="phase">not connected</span>`. On the
@@ -64,7 +63,7 @@ assistant's voice either way.
 A page's `way` must match the server's mount; `expect: "press"` or `expect: "voice"` among the options makes the console
 warn when the page names another way.
 
-How it works. The mouth is driven by the assistant's audio level, which the `level` view method receives between 0 and 1 many times a second on both mounts, and three-vrm's `aa` expression takes exactly such a number; `vrm.update(dt)` every frame is what makes the expression show, and `VRMUtils.rotateVRM0` turns a VRM 0.x model to face the camera. Everything else on the page is three.js's and three-vrm's, so a later version of either is copied the same way: their page, the one import line, the conversation.
+How it works. The mouth is driven by the assistant's audio level, which the `level` view method receives between 0 and 1 many times a second on both mounts, and three-vrm's `aa` expression takes exactly such a number; `vrm.update(dt)` every frame is what makes the expression show, and `VRMUtils.rotateVRM0` turns a VRM 0.x model to face the camera. Everything else on the page is three.js's and three-vrm's, so a later version of either is copied the same way: their page, the import lines, the conversation.
 
 ## Printing and logging what happens
 
@@ -84,4 +83,4 @@ a plain function or an `async` one of the callback dict.
 
 ## Offline use
 
-The page already works offline: `vrm.js` is a file beside the page, and so is the model. A page written from three-vrm's README with its jsDelivr import map also works, as long as the browser can reach jsDelivr; the only change for the conversation is then the `ConnectConversation` import, the `level` view and, for press-to-speak, the button.
+The page needs esm.sh when it opens, because `pipecat_vrm.js` imports three.js and three-vrm from there; the model is a file beside the page. A page written from three-vrm's README with its jsDelivr import map needs jsDelivr in the same way; the only change for the conversation is then the `ConnectConversation` import, the `level` view and, for press-to-speak, the button.

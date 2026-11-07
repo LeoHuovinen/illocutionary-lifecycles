@@ -32,7 +32,7 @@ downloaded, the page says "No model: download one, see README.md".
   "nod at me" makes it nod before the turn ends. The instance is the `incremental_phrase_instances` entry of each step.
 - `page/vrm_motion.js`: the movements: arms down, idle head drift, the head tilt while
   listening, bobs and glances on punctuation while speaking, blinks, eye contact, breathing, the mouth's shape, nods.
-- `page/vrm.js`: three.js and @pixiv/three-vrm (both MIT) bundled as one module, so the page needs no CDN.
+- three.js r180 and @pixiv/three-vrm 3.5.5 (both MIT), which `page/pipecat_vrm.js` imports from esm.sh, so there is no bundle to rebuild.
 - `page/ConnectConversation.js`, `page/PressToSpeakAdapterWebsocketMount.js`, `page/log.js`: IL's browser scripts.
 - `page/index.html`: the page, the character filling it.
 - `server.py`: the press-to-speak server of `../README-PRESS.md` on port 7871.
