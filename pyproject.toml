@@ -65,6 +65,10 @@ dev = [
 [tool.setuptools.packages.find]
 include = ["illocutionary_lifecycles*"]
 
+# The HTTP mount answers the command HELP with the README beside it, so the file ships with the package.
+[tool.setuptools.package-data]
+"illocutionary_lifecycles.server.adapter_mounts.http_mounts" = ["README-HTTPEndpointMount.md"]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 120

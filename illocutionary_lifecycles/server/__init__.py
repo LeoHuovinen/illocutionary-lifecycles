@@ -18,5 +18,5 @@ The folder ``adapters`` holds one adapter class per kind of caller that writes i
 the assembler that joins spoken final transcriptions into turns. The folder ``adapter_callback_handlers`` holds the
 adapter callbacks a session sends after a save and the readers that turn the record into streams and cards. The folder
 ``adapter_mounts`` holds the mounts, each of which puts one adapter on one wire of an app the server owns, text or
-press-to-speak over a WebSocket, or voice over WebRTC through Pipecat.
+press-to-speak over a WebSocket, voice over WebRTC through Pipecat, or text behind an OpenAI-compatible API over HTTP.
 """

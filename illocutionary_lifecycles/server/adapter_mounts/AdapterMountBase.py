@@ -1,4 +1,4 @@
-"""``AdapterMountBase``, the base class of the three mounts, holding what each shares, the per-connection session, the
+"""``AdapterMountBase``, the base class of the four mounts, holding what each shares, the per-connection session, the
 hooks a server passes, and the rule of what crosses the wire to the connecting side.
 
 This repository runs conversations through authored illocutionary states (named for speech act theory, where an
@@ -13,9 +13,10 @@ and it imports ``illocutionary_lifecycles.core.ConversationInit.FlowInCanonicalK
 Per connection a mount builds a session through ``NewConversationSession``, creates its adapter, registers the
 handlers that carry every adapter callback to the connecting side and to the server's ``OnAdapterCallback``, starts the
 session, calls the server's ``OnSessionOpened``, sends the opening, and then carries turns from the wire in its
-``Attend``. ``MountOnApp`` adds the one route of the way to the app, a WebSocket for the text and press-to-speak ways
-and Pipecat's offer route for the voice way, and nothing over HTTP. The hooks, the overrides and the relay rule are the
-surface a server uses, and a server needs nothing of its own besides them.
+``Attend``. ``MountOnApp`` adds the routes of the way to the app, a WebSocket for the text and press-to-speak ways,
+Pipecat's offer route for the voice way, and three HTTP routes for ``HTTPEndpointMount``, which keeps its sessions
+between requests. The hooks, the overrides and the relay rule are the surface a server uses, and a server needs nothing of
+its own besides them.
 
 What crosses the wire is set here. ``RelayAdapterCallback`` drops the save callback and strips ``turns`` and
 ``prompt`` from every other adapter callback, so a page's views never receive the record or the composed prompt.

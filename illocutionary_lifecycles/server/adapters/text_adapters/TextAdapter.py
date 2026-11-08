@@ -8,7 +8,8 @@ far, from which the next prompt is composed), and a typed line enters the folder
 folder ``server``, to be checked by ``analyzers`` and recorded in ``memory``. What every adapter shares comes from
 ``illocutionary_lifecycles.server.adapters.AdapterBase.AdapterBase``, and what is added here is the save of a reply
 once it has been shown. The adapter is created per connection by
-``illocutionary_lifecycles.server.adapter_mounts.websocket_mounts.TextAdapterWebsocketMount``. The press-to-speak mount does not
+``illocutionary_lifecycles.server.adapter_mounts.websocket_mounts.TextAdapterWebsocketMount`` and per session by
+``illocutionary_lifecycles.server.adapter_mounts.http_mounts.HTTPEndpointMount``. The press-to-speak mount does not
 use it, because typed text there joins the spoken turn through the voice adapter's assembler.
 """
 from __future__ import annotations

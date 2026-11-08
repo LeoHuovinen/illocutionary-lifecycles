@@ -85,7 +85,7 @@ pip install -e ".[text,cosmos]"     # extras combine, here text with Cosmos DB s
 
 | extra | what it adds | for |
 |---|---|---|
-| `text` | fastapi, uvicorn, websockets | `TextAdapterWebsocketMount`, text over WebSocket |
+| `text` | fastapi, uvicorn, websockets | `TextAdapterWebsocketMount`, text over WebSocket, and `HTTPEndpointMount`, an OpenAI-compatible API over HTTP |
 | `press` | the `text` extra and azure-cognitiveservices-speech | `PressToSpeakAdapterWebsocketMount`, press-to-speak over the same WebSocket, half-duplex, Azure STT and TTS |
 | `pipecat` | pipecat-ai 1.12 or newer and below 2, with silero, azure, runner, webrtc, elevenlabs, openai, and python-dotenv | `PipecatVoiceAdapterWebRtcMount`, full-duplex voice over WebRTC |
 | `local` | transformers, torch | a local model instead of a hosted one |
@@ -118,6 +118,7 @@ A local model is a `LocalLLMConfig` passed as the session's `llm_config`, with t
 | press-to-speak over WebSocket, half-duplex, Azure STT and TTS, no Pipecat | [`README-PRESS.md`](examples/README-PRESS.md) | [`examples/2-press-to-speak`](examples/2-press-to-speak) | [`PressToSpeakAdapterWebsocketMount`](illocutionary_lifecycles/server/adapter_mounts/websocket_mounts/PressToSpeakAdapterWebsocketMount.py) |
 | full-duplex voice over WebRTC through Pipecat | [`README-VOICE.md`](examples/README-VOICE.md) | [`examples/7-plasma-visualizer-pipecat`](examples/7-plasma-visualizer-pipecat) | [`PipecatVoiceAdapterWebRtcMount`](illocutionary_lifecycles/server/adapter_mounts/webrtc_mounts/PipecatVoiceAdapterWebRtcMount.py) |
 | a VRM character, on press-to-speak or on WebRTC voice | [`README-VRM.md`](examples/README-VRM.md) | [`examples/3-vrm-press-to-speak`](examples/3-vrm-press-to-speak), [`examples/5-vrm-pipecat`](examples/5-vrm-pipecat) | either of the two above |
+| an OpenAI-compatible API over HTTP, for a program or a tool instead of a page | [`README-HTTPEndpointMount.md`](illocutionary_lifecycles/server/adapter_mounts/http_mounts/README-HTTPEndpointMount.md) | none, the server below with `HTTPEndpointMount` in place of the text mount | [`HTTPEndpointMount`](illocutionary_lifecycles/server/adapter_mounts/http_mounts/HTTPEndpointMount.py) |
 
 Each example is a server, a frontend folder `page/` and `flow.json`, the JSON object whose top-level fields are `PromptBlocks` and `ConversationStates`, which `json.load` reads into the dict the mount class takes as its first argument. Copy one, set the environment variables, run `python server.py`. [`examples/README.md`](examples/README.md) indexes all nine.
 
@@ -136,7 +137,7 @@ TextAdapterWebsocketMount(flow).MountOnApp(app, "/ws")
 uvicorn.run(app, host="127.0.0.1", port=8765)
 ```
 
-`flow` is the dict `json.load` returns for `flow.json`, with the top-level fields `PromptBlocks` and `ConversationStates`, and `SessionProvider` receives it unchanged as `ConversationStateInitBundle`. `PressToSpeakAdapterWebsocketMount` is used the same way, and `PipecatVoiceAdapterWebRtcMount` goes on Pipecat's runner app. Everything else a server can pass or override is in the docstring of [`AdapterMountBase.py`](illocutionary_lifecycles/server/adapter_mounts/AdapterMountBase.py).
+`flow` is the dict `json.load` returns for `flow.json`, with the top-level fields `PromptBlocks` and `ConversationStates`, and `SessionProvider` receives it unchanged as `ConversationStateInitBundle`. `PressToSpeakAdapterWebsocketMount` is used the same way, `PipecatVoiceAdapterWebRtcMount` goes on Pipecat's runner app, and `HTTPEndpointMount(flow).MountOnApp(app, "/v1")` offers the same flow as an OpenAI-compatible API with the conversation kept on the server under the caller's key, as [`README-HTTPEndpointMount.md`](illocutionary_lifecycles/server/adapter_mounts/http_mounts/README-HTTPEndpointMount.md) explains. Everything else a server can pass or override is in the docstring of [`AdapterMountBase.py`](illocutionary_lifecycles/server/adapter_mounts/AdapterMountBase.py).
 
 ## A custom frontend
 

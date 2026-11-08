@@ -1,6 +1,6 @@
 """The folder of the mounts, each of which puts one adapter on one wire of an app the server owns, in three ways that
-replace each other, text, press-to-speak and voice, with one page contract, each giving a page everything the one
-before gives.
+replace each other for a page, text, press-to-speak and voice, with one page contract, each giving a page everything
+the one before gives, and a fourth mount for programs, an OpenAI-compatible API over HTTP.
 
 This repository runs conversations through authored illocutionary states (named for speech act theory, where an
 utterance's force is what it does, such as asking or answering), with analyzers (separate calls with their own prompts
@@ -21,8 +21,10 @@ other half of the page script of the same name, ``TextAdapterWebsocketMount.js``
 ``PressToSpeakAdapterWebsocketMount.js`` or ``PipecatVoiceAdapterWebRtcMount.js``, copied beside every example page
 under ``examples/*/page`` with ``ConnectConversation.js``, which gives a page one interface on every way. The
 connecting side may be a browser page with those scripts, a mobile app, a robot or any program that speaks
-the wire. A server is a file that owns an app, builds a mount with the exported flow and the settings outside it, such as
-the voice, calls ``MountOnApp`` and runs, and ``examples`` holds one such server per way. A new wire is a new mount in a
-new subfolder here, inheriting ``AdapterMountBase``, setting ``Way`` and defining ``MountOnApp`` and ``Attend``, with its
-page script beside the examples' pages. Nothing is imported or re-exported here.
+the wire. The folder ``http_mounts`` holds ``HTTPEndpointMount``, with ``TextAdapter`` behind an OpenAI-compatible
+API, for a program or library written for that API, which has no page script because its connecting side is a
+program. A server is a file that owns an app, builds a mount with the exported flow and the settings outside it, such
+as the voice, calls ``MountOnApp`` and runs, and ``examples`` holds one such server per way. A new wire is a new mount
+in a new subfolder here, inheriting ``AdapterMountBase``, setting ``Way`` and defining ``MountOnApp`` and ``Attend``,
+with its page script beside the examples' pages. Nothing is imported or re-exported here.
 """

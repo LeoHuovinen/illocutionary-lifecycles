@@ -78,3 +78,19 @@ and `TextAdapterWebsocketMount.js` beside it in its own folder: copy all three f
 On the server, a handler of your own for the adapter callbacks is still one argument of the mount, `OnAdapterCallback`,
 a plain function or an `async` one of the callback dict.
 
+
+## The same conversation as an OpenAI-compatible API
+
+`HTTPEndpointMount` serves the same flow to programs instead of pages, in the request and reply formats of OpenAI's
+API, with the conversation kept on the server under the caller's API key. It is the server above with one import and
+one line changed and the page folder left out:
+
+```python
+from illocutionary_lifecycles.server.adapter_mounts.http_mounts.HTTPEndpointMount import HTTPEndpointMount
+
+HTTPEndpointMount(conversation).MountOnApp(app, "/v1")
+```
+
+One key is one conversation at a time, and
+[`README-HTTPEndpointMount.md`](../illocutionary_lifecycles/server/adapter_mounts/http_mounts/README-HTTPEndpointMount.md)
+beside the mount explains it for the person who connects to it.
