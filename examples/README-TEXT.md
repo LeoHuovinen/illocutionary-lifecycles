@@ -91,6 +91,8 @@ from illocutionary_lifecycles.server.adapter_mounts.http_mounts.HTTPEndpointMoun
 HTTPEndpointMount(conversation).MountOnApp(app, "/v1")
 ```
 
-One key is one conversation at a time, and
+Without a server file of your own, `python -m illocutionary_lifecycles.server.OpenAIServer flow.json` serves one
+dialogue flow the same way on port 8765, with `--port`, `--route`, `--idle-seconds`, `--model-name`, `--help-text-file`
+and `--ended-text` as its options, and prints the curl row to try it. One key is one conversation at a time, and
 [`README-HTTPEndpointMount.md`](../illocutionary_lifecycles/server/adapter_mounts/http_mounts/README-HTTPEndpointMount.md)
 beside the mount explains it for the person who connects to it.
