@@ -33,7 +33,7 @@ IL runs the conversation and ships no frontend. Any client, a browser, a native 
 
 - **[Visual kiosk](examples/1-chatbot-visual-kiosk)**, picture cards for each choice and chat bubbles, styled with [daisyUI](https://daisyui.com).
 - **[Press to speak](examples/2-press-to-speak)**, a hold-to-talk button with [LiveKit's audio visualizer](https://github.com/livekit/components-js) and live tables of the step, the answers and the turns.
-- **[VRM character](examples/3-vrm-press-to-speak)**, a 3D avatar with lip sync, blinks and nods, on [three.js](https://threejs.org) and [@pixiv/three-vrm](https://github.com/pixiv/three-vrm). Also [over Pipecat](examples/5-vrm-pipecat).
+- **[VRM character](examples/3-vrm-press-to-speak)**, a 3D avatar with lip sync, blinks and nods, on [three.js](https://threejs.org) and [@pixiv/three-vrm](https://github.com/pixiv/three-vrm). Also [over Pipecat](examples/5-vrm-pipecat) and [in a VR headset](examples/9-vrm-webxr-pipecat).
 - **[Rive character](examples/4-rive-press-to-speak)**, a 2D animated character with lip sync, on the [Rive web runtime](https://github.com/rive-app/rive-wasm). Also [over Pipecat](examples/6-rive-pipecat).
 - **[Plasma visualizer](examples/7-plasma-visualizer-pipecat)**, a plasma animation driven by the assistant's audio, from [Pipecat's voice-ui-kit](https://github.com/pipecat-ai/voice-ui-kit).
 - **[Side by side](examples/8-side-by-side)**, any of these frontends together on one conversation.
