@@ -4,8 +4,13 @@
 //
 //   import { mountVrm } from "./pipecat_vrm.js";
 //   const vrm = mountVrm(element);              // the menu of the models in vrm/, the first one loaded
+//   mountVrm(element, { at: { x: 0, y: 0, z: -1.2, tilt: 0, turn: 0 } })   // where the scene stands in VR, metres and radians
 //   views: [vrm]                                // in ConnectConversation: level(l), phase(p), botMessage(text), adapterCallback(e)
 //   views: [vrm, RTVI_States(vrm)]              // on the Pipecat voice mount: turnState(s) from RTVI_States.js replaces phase(p)
+//   XrPanels(vrm)                               // vrm.scene and vrm.renderer, for the panels of xr_panels.js
+//
+// This module owns the renderer, the WebXR session, the frame loop and placing the VRM model 1.2 m in front of the viewer,
+// and hands out its scene and renderer so xr_panels.js can add panels to the same scene.
 //
 // No model is shipped: VRM_MODELS names each one with its download address, README.md gives the command that fetches
 // them into vrm/, and the menu lists only the files found there. three.js and three-vrm are imported from esm.sh (both MIT).
@@ -24,7 +29,7 @@ export const VRM_MODELS = [
   { name: "AvatarSample_C", file: "AvatarSample_C.vrm", download: AMICA + "AvatarSample_D.vrm", by: "VRoid Project" },
 ].map((m) => ({ ...m, url: new URL(`./vrm/${m.file}`, import.meta.url).href }));
 
-export function mountVrm(element) {
+export function mountVrm(element, { at = { x: 0, y: 0, z: -1.2, tilt: 0, turn: 0 } } = {}) {
   const canvas = document.createElement("canvas"); canvas.style.cssText = "width:100%;height:100%;display:block";
   const select = document.createElement("select"); select.style.cssText = "position:absolute;top:6px;right:8px;z-index:4;font:12px system-ui;border-radius:999px;padding:2px 8px;background:#1f2633;color:#dde;border:1px solid #3a4456";
   select.append(Object.assign(document.createElement("option"), { textContent: "Looking in vrm/…", value: "", disabled: true, selected: true }));
@@ -53,8 +58,9 @@ export function mountVrm(element) {
   new ResizeObserver(fit).observe(element); fit();
   const clock = new THREE.Clock();
   // In VR the viewer starts at the floor's origin looking along -z, so the character moves 1.2 m that way and faces them.
-  renderer.xr.addEventListener("sessionstart", () => { scene.position.set(0, 0, -1.2); });
-  renderer.xr.addEventListener("sessionend", () => { scene.position.set(0, 0, 0); fit(); });
+  // at: where the scene stands in VR, in metres from the viewer's starting point, tilted around x and turned around y in radians.
+  renderer.xr.addEventListener("sessionstart", () => { scene.position.set(at.x, at.y, at.z); scene.rotation.set(at.tilt || 0, at.turn || 0, 0); });
+  renderer.xr.addEventListener("sessionend", () => { scene.position.set(0, 0, 0); scene.rotation.set(0, 0, 0); fit(); });
   renderer.setAnimationLoop(() => {   // in VR the headset times the frames, which requestAnimationFrame cannot
     const dt = clock.getDelta();
     motion.update(dt, level); vrm?.update(dt);
@@ -72,6 +78,7 @@ export function mountVrm(element) {
   });
 
   return {
+    scene, renderer,                            // the VRM model's scene and its renderer, for xr_panels.js to add panels to
     level: (l) => { level = l; },               // the assistant's audio level, 0..1: the mouth
     phase: (p) => { if (!turnStates) motion.phase(p); },   // listening | thinking | speaking: the head and the eyes
     turnState: (s) => { turnStates = true; motion.phase(s); },   // idle | listening | thinking | speaking, from RTVI_States.js

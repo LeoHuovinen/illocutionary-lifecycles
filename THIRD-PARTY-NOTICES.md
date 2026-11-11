@@ -15,7 +15,7 @@ The four pictures in `examples/1-chatbot-visual-kiosk/page/img/` come from Wikim
 
 ## Characters
 
-No VRM or Rive character is shipped. Each example's `README.md` gives the download, the author and the licence, and whoever downloads a character follows that licence. The recording `readme-screenshots/side-by-side.gif` shows AvatarSample_A by VRoid Project, whose licence data allows this and asks for no credit.
+No VRM or Rive character is shipped. Each example's `README.md` gives the download, the author and the licence, and whoever downloads a character follows that licence. The recording `readme-screenshots/side-by-side.gif` shows AvatarSample_A by VRoid Project, whose licence data allows this and asks for no credit. The recording `readme-screenshots/webxr.gif` shows AvatarSample_A too.
 
 ## Bundled libraries
 
@@ -31,6 +31,8 @@ No VRM or Rive character is shipped. Each example's `README.md` gives the downlo
 `pipecat_plasma.js` in `examples/7-plasma-visualizer-pipecat/page/` bundles nothing. When the page opens, it imports `@pipecat-ai/voice-ui-kit` 0.14.1, `react` 18.3.1 and `react-dom` 18.3.1 from esm.sh, and those bring their own dependencies. Each stays under its own licence, and `LICENSE-voice-ui-kit.txt` beside the file gives voice-ui-kit's.
 
 `pipecat_vrm.js` in `examples/3-vrm-press-to-speak/page/`, `5-vrm-pipecat/page/` and `9-vrm-webxr-pipecat/page/` bundles nothing. When the page opens, it imports `three` 0.180.0 (r180) with its `GLTFLoader` and `@pixiv/three-vrm` 3.5.5 from esm.sh, and those bring their own dependencies. In `9-vrm-webxr-pipecat/page/` it also imports three.js's `VRButton` from the same `three` 0.180.0. Each stays under its own licence, and the texts for three.js and three-vrm are below.
+
+`xr_panels.js` in `examples/9-vrm-webxr-pipecat/page/` bundles nothing. When the page opens, it imports `three` 0.180.0 and `modern-screenshot` 4.6.0 (MIT, https://github.com/qq15725/modern-screenshot) from esm.sh, each under its own licence.
 
 ## Licence texts
 

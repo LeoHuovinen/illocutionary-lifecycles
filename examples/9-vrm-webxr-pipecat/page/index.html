@@ -1,13 +1,17 @@
 <!doctype html>
-<!-- A VRM character (pipecat_vrm.js: its scene and its movements, vrm_motion.js) filling
-     the page, over IL's Pipecat voice mount: speak, the pause ends the turn. Enter VR shows the character in a VR headset.
-     Read README.md. -->
+<!-- A VRM model filling the page, shown by pipecat_vrm.js and moved by vrm_motion.js, with Pipecat's plasma visualizer
+     and an animation from the Rive web runtime in its lower corners, talking through IL's Pipecat voice mount. A pause in
+     the user's speech ends their turn. In a WebXR session the rest of the page appears as flat panels around the VRM
+     model, through xr_panels.js. Read README.md. -->
 <meta charset="utf-8">
 <title>VRM character in VR, Pipecat</title>
 <style>body{margin:0;height:100vh;background:#101018;color:#ddd;font:14px system-ui;overflow:hidden}#stage{position:absolute;inset:0}
 #top{position:absolute;top:8px;left:8px;z-index:5}
-#turnlabel{position:absolute;top:28px;left:50%;transform:translateX(-50%);z-index:3;font:600 44px "Quicksand","Nunito","Comfortaa","Segoe UI Rounded",ui-rounded,system-ui,sans-serif;white-space:nowrap;text-shadow:0 0 7px rgba(0,0,0,0.6)}</style>
-<div id="stage"></div><div id="top"><button id="start">Start</button> <span id="phase">not connected</span></div><div id="turnlabel"></div><div class="kara"></div>
+#turnlabel{position:absolute;top:28px;left:50%;transform:translateX(-50%);z-index:3;font:600 44px "Quicksand","Nunito","Comfortaa","Segoe UI Rounded",ui-rounded,system-ui,sans-serif;white-space:nowrap;text-shadow:0 0 7px rgba(0,0,0,0.6)}
+#plasma,#rive{position:absolute;bottom:12px;width:min(26vw,320px);aspect-ratio:1;z-index:2;border-radius:12px;overflow:hidden}
+#plasma{left:12px;background:#1f2937}#rive{right:12px;background:#e9edf3}
+#pictures{position:absolute;top:56px;right:12px;width:min(30vw,380px);height:min(42vh,340px);z-index:2;border-radius:12px;overflow:hidden}</style>
+<div id="stage"></div><div id="plasma"></div><div id="rive"></div><div id="pictures"></div><div id="top"><button id="start">Start</button> <span id="phase">not connected</span></div><div id="turnlabel"></div><div class="kara"></div>
 <script type="module">
   import "./log.js";                             // the two log streams, in the browser console: recorded events and adapter callbacks, each on its own
   import { ConnectConversation } from "./ConnectConversation.js";
@@ -15,8 +19,32 @@
   import { TurnLabel } from "./turn_label.js";             // a view: the listening / thinking / speaking word above the character
   import { mountVrm } from "./pipecat_vrm.js";            // a view with level(), phase(), botMessage(): the character
   import { RTVI_States } from "./RTVI_States.js";          // a view with rtvi(): the character's movements per turn state
-  const vrm = mountVrm(document.getElementById("stage"));
+  import { mountPlasma, PLASMA_TURN_STATES } from "./plasma/pipecat_plasma.js";   // track(), the assistant's audio, for Pipecat's plasma visualizer
+  import { mountRive } from "./rive/pipecat_rive.js";          // level(), the assistant's audio level, for the Rive web runtime animation
+  import { NodePictures } from "./kiosk/node_pictures.js";      // start(), adapterCallback(), userMessage(), botMessage(), for the current step's choices as picture cards
+  import { XrPanels } from "./xr_panels.js";              // the parts above as panels around the VRM model in WebXR
+  // Where everything stands in VR. x, y and z are metres, tilt turns around the x axis and turn around the y axis, in
+  // radians. The VRM model's place is measured from the viewer's starting point, and every panel's from the VRM model.
+  const PLACES = {
+    vrm:      { x: 0,     y: 0,    z: -1.2, tilt: 0, turn: 0 },
+    pictures: { x: -1.3,  y: 1.25, z: 0,    tilt: 0, turn: 0, width: 0.55 },
+    plasma:   { x: -0.65, y: 1.25, z: 0,    tilt: 0, turn: 0, width: 0.4 },
+    rive:     { x: 0.65,  y: 1.25, z: 0,    tilt: 0, turn: 0, width: 0.4 },
+    karaoke:  { x: 1.3,   y: 1.25, z: 0,    tilt: 0, turn: 0, width: 0.55 },
+    label:    { x: 0,     y: 1.62, z: 0,    tilt: 0, turn: 0, width: 0.4 },
+  };
+  const vrm = mountVrm(document.getElementById("stage"), { at: PLACES.vrm });
   const states = RTVI_States(vrm);
+  const plasma = mountPlasma(document.getElementById("plasma"), { effectScale: 0.94, lerpSpeed: 0.04 });
+  plasma.update(PLASMA_TURN_STATES.idle);
+  const plasmaStates = RTVI_States({ turnState: (s) => plasma.update(PLASMA_TURN_STATES[s]) });   // the plasma visualizer's look while listening, thinking and speaking, from the same speech events
+  const rive = mountRive(document.getElementById("rive"));
+  const design = await (await fetch("kiosk/design.json")).json();
+  const pictures = await NodePictures(document.getElementById("pictures"), {
+    design,
+    pictures: { "Pizza": "kiosk/img/pizza.jpg", "Burger": "kiosk/img/burger.jpg", "Yes": "kiosk/img/fries.jpg", "No": "kiosk/img/burger.jpg", "pizza": "kiosk/img/topping.jpg" },
+    theme: "cupcake",
+  });
   const label = TurnLabel(document.getElementById("turnlabel"), { hue: 195 });
   const karaoke = Karaoke([document.querySelector(".kara")], {   // the karaoke's look on this page
     botFontSize: "22px",                                    // the assistant's line: the largest size of its words
@@ -29,5 +57,12 @@
   const showPhaseWord = true;                             // show the listening / thinking / speaking word
   const phaseWordColour = "#dddddd";                      // its colour
   Object.assign(document.getElementById("phase").style, { display: showPhaseWord ? "" : "none", color: phaseWordColour });
-  document.getElementById("start").onclick = () => ConnectConversation({ way: "voice", phase: "#phase", views: [karaoke, vrm, states, label] });   // from a click: Safari and iOS want a gesture
+  // In WebXR each part of the page becomes a panel, placed by PLACES above.
+  const panels = XrPanels(vrm);
+  panels.add(document.getElementById("plasma"), PLACES.plasma);
+  panels.add(document.getElementById("rive"), PLACES.rive);
+  panels.add(document.getElementById("pictures"), PLACES.pictures);
+  panels.add(document.querySelector(".kara"), PLACES.karaoke);
+  panels.add(document.getElementById("turnlabel"), PLACES.label);
+  document.getElementById("start").onclick = () => ConnectConversation({ way: "voice", phase: "#phase", views: [karaoke, vrm, states, plasma, plasmaStates, rive, pictures, label] });   // from a click: Safari and iOS want a gesture
 </script>

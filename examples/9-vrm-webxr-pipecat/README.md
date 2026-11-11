@@ -1,19 +1,36 @@
-# A VRM character over Pipecat, in a VR headset
+# Conversation running in VR using WebXR (multiple frontend options)
 
-A VRM character, filling the page, over IL's Pipecat voice mount: the microphone
-stays open and the pause ends the turn. In a VR headset's browser, such as the Meta Quest's, the Enter VR button places
-the character 1.2 m in front of the viewer. Read the main `README.md` at the top of the repository and `../README-VOICE.md` first.
+![The VRM model in WebXR with its panels](../../readme-screenshots/webxr.gif)
 
-## Opening it in a VR headset
+With `.env` set up as in `../README-VOICE.md`, run `python server.py` and open `http://127.0.0.1:7882/page/`.
 
-The headset's browser allows the microphone and VR only for pages on HTTPS or on `127.0.0.1`. Connect the headset to the
-computer by USB with developer mode on, and run `adb reverse tcp:7882 tcp:7882` on the computer. The headset's browser
-then reaches the server at `http://127.0.0.1:7882/page/`. Press Start, then Enter VR. In VR only the character is shown,
-because the karaoke and the turn-state word are HTML on the page, and a VR session does not show HTML.
+The page shows a VRM model, with Pipecat's plasma visualizer and an animation from the Rive web runtime in its lower
+corners, the karaoke of the spoken words and a listening or speaking label, and talks through IL's Pipecat voice mount.
+The microphone stays open, and a pause in the user's speech ends their turn. In a WebXR session the VRM model stands
+1.2 m in front of the viewer, with everything else on the page as flat panels around it. Read the repository's main
+`README.md` and `../README-VOICE.md` first. Browsers allow the microphone and WebXR only on HTTPS or on `127.0.0.1`.
+
+## The panels in VR
+
+This section explains how everything else on the page appears in VR. A WebXR session shows only the 3D scene, never the
+page's HTML, so during the session `page/xr_panels.js` copies each of them onto a flat panel in the VRM model's scene.
+Whatever WebGL draws is copied on every WebXR frame at almost no cost. The karaoke and the label are
+HTML, which is copied through modern-screenshot only after it changes and no more often than once every 150 ms, because
+making a picture from HTML is slow and the frame waits for it.
+
+Every place is set in the `PLACES` table at the top of `page/index.html`. The VRM model's entry is measured from where
+the viewer stands when the WebXR session starts, so `z: -1.2` puts the VRM model 1.2 m in front of the viewer. Every
+panel's entry is measured from the VRM model. In each entry `x` is metres to the right, `y` metres up from the floor and
+`z` metres towards the viewer, `tilt` turns around the x axis and `turn` around the y axis, both in radians, and a panel's
+`width` is in metres, its height following the shape of what it copies.
+
+If you want a room around them, the WebXR Samples' [Cube Room](https://github.com/immersive-web/webxr-samples/tree/main/media/gltf/cube-room)
+(CC BY 3.0) loads into the same scene with three.js's `GLTFLoader`, added to `vrm.scene`.
 
 ## Downloading models
 
-The page's menu lists only the models whose file is in `page/vrm/`. Download all three, from this folder:
+The VRM models are downloaded separately, with the commands below. Run these commands in this folder. Amica's file names are one letter ahead of VRoid's, so each file is saved under its
+VRoid name, and Amica's own `AvatarSample_A.vrm` is left out because its licence forbids redistribution.
 
 ```bash
 mkdir -p page/vrm && cd page/vrm
@@ -22,38 +39,24 @@ curl -fL https://raw.githubusercontent.com/semperai/amica/master/public/vrm/Avat
 curl -fL https://raw.githubusercontent.com/semperai/amica/master/public/vrm/AvatarSample_D.vrm -o AvatarSample_C.vrm
 ```
 
-They are VRoid Project's sample avatars AvatarSample_A, B and C (about 15 MB each); each model's own licence data lets
-anyone use, change and pass it on, with no credit. Amica's file names are shifted by one, hence the renaming: Amica's
-`AvatarSample_A.vrm` is another model whose licence forbids passing it on, so it is not listed. Any other `.vrm` works too:
-add it to `VRM_MODELS` in `page/pipecat_vrm.js`. The repository's `.gitignore` keeps `page/vrm/` out of it; with nothing
-downloaded, the page says "No model: download one, see README.md".
+These are VRoid Project's sample avatars, about 15 MB each, free to use, change and redistribute without credit.
+The animations for the Rive web runtime are downloaded into `../6-rive-pipecat/page/rive/` with the commands in
+`../6-rive-pipecat/README.md`. Git ignores both folders.
 
-## The files
+## Files
 
-- `page/pipecat_vrm.js`: the character as a view, `mountVrm(element)` with `level()`, `phase()`, `botMessage()` and
-  `adapterCallback()`. Its scene is a VRM panel: the camera on the head, lights, the
-  mouth on the assistant's audio level. Added: the model menu over `vrm/` and the warning. For VR it has
-  three.js's `VRButton`, turns on `renderer.xr`, places the character in front of the viewer in VR, and draws through
-  `renderer.setAnimationLoop`, since in VR the headset times the frames and `requestAnimationFrame` cannot.
-- `flow.json` is the Pizza-or-burger flow with a "motion" incremental phrase instance on every step. While the user is
-  still speaking, the incremental analyzer picks one of its option words (`nod`, `shake_head`, `look_left`, `look_right`,
-  `look_center`, `close_eyes` or `none`) from the speech so far, and `adapterCallback()` makes the character do it, so
-  "nod at me" makes it nod before the turn ends. The instance is the `incremental_phrase_instances` entry of each step.
-- `page/vrm_motion.js`: the movements: arms down, idle head drift, the head tilt while
-  listening, bobs and glances on punctuation while speaking, blinks, eye contact, breathing, the mouth's shape, nods.
-- three.js r180 and @pixiv/three-vrm 3.5.5 (both MIT), which `page/pipecat_vrm.js` imports from esm.sh, so there is no bundle to rebuild.
-- `page/ConnectConversation.js`, `page/PipecatVoiceAdapterWebRtcMount.js`, `page/pipecat-client.js`, `page/log.js`: IL's
-  browser scripts.
-- `page/index.html`: the page, the character filling it.
-- `server.py`: the Pipecat voice server of `../README-VOICE.md` on port 7882.
+Here is what each file does.
 
-```js
-import { mountVrm } from "./pipecat_vrm.js";
-const vrm = mountVrm(document.getElementById("stage"));
-document.getElementById("start").onclick = () => ConnectConversation({ way: "voice", phase: "#phase", views: [karaoke, vrm, label] });
-```
+- `page/index.html` mounts every part, connects them with `ConnectConversation` and adds the panels.
+- `page/pipecat_vrm.js` and `page/vrm_motion.js` show and move the VRM model, add the WebXR button and return its
+  `scene` and `renderer` for the panels.
+- `page/xr_panels.js` copies the page onto panels during a WebXR session, and runs the page's
+  `requestAnimationFrame` callbacks on the WebXR frames, since a browser may pause `requestAnimationFrame` during the
+  session.
+- `flow.json` is the conversation, in which the user chooses pizza or burger. While the user speaks, it also picks a
+  movement such as `nod` or `look_left` from their words, so saying "nod at me" makes the VRM model nod at once.
+- `server.py` runs the Pipecat voice server described in `../README-VOICE.md` on port 7882, and also serves
+  `../7-plasma-visualizer-pipecat/page/`, `../6-rive-pipecat/page/` and `../1-chatbot-visual-kiosk/page/` at
+  `/page/plasma/`, `/page/rive/` and `/page/kiosk/`, so `page/index.html` imports their modules, pictures and licences
+  where they are.
 
-The page also shows the karaoke (`page/karaoke.js`) and the turn-state word (`page/turn_label.js`), as the other speech
-examples do.
-
-`python server.py`, open `http://127.0.0.1:7882/page/`, pick a model, press Start, press Enter VR, speak.
