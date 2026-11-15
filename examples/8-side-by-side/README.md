@@ -63,4 +63,4 @@ on the side-by-side page presses each page's own Start, then connects; every pag
 - `side_by_side.py`: runs Pipecat if any page uses it, else press-to-speak, else text, and serves the pages' folders.
 - `page/index.html`, `page/side_by_side.js`: the side-by-side page and its shared connection.
 - `page/TextAdapterWebsocketMount.js`, `page/PressToSpeakAdapterWebsocketMount.js`, `page/PipecatVoiceAdapterWebRtcMount.js`,
-  `page/pipecat-client.js`, `page/log.js`: IL's browser scripts, for whichever mount runs.
+  `page/log.js`: IL's browser scripts, for whichever mount runs.

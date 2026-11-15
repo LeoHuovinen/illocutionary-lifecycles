@@ -14,7 +14,7 @@ The quickest way is the examples' own view, `pipecat_vrm.js`: a character as one
 models in `vrm/` beside the page and a warning when there is none. Copy into your `page/` folder, from
 `examples/3-vrm-press-to-speak/page/` (press-to-speak) or `examples/5-vrm-pipecat/page/` (Pipecat voice):
 `pipecat_vrm.js`, `vrm_motion.js`, `ConnectConversation.js`, `log.js`, and the mount's script
-(`PressToSpeakAdapterWebsocketMount.js`, or `PipecatVoiceAdapterWebRtcMount.js` with `pipecat-client.js`). Then:
+(`PressToSpeakAdapterWebsocketMount.js`, or `PipecatVoiceAdapterWebRtcMount.js`). Then:
 
 ```html
 <div id="stage" style="position:absolute;inset:0"></div>

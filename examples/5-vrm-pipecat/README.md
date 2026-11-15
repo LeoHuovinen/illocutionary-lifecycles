@@ -33,7 +33,7 @@ downloaded, the page says "No model: download one, see README.md".
 - `page/vrm_motion.js`: the movements: arms down, idle head drift, the head tilt while
   listening, bobs and glances on punctuation while speaking, blinks, eye contact, breathing, the mouth's shape, nods.
 - three.js r180 and @pixiv/three-vrm 3.5.5 (both MIT), which `page/pipecat_vrm.js` imports from esm.sh, so there is no bundle to rebuild.
-- `page/ConnectConversation.js`, `page/PipecatVoiceAdapterWebRtcMount.js`, `page/pipecat-client.js`, `page/log.js`: IL's
+- `page/ConnectConversation.js`, `page/PipecatVoiceAdapterWebRtcMount.js`, `page/log.js`: IL's
   browser scripts.
 - `page/index.html`: the page, the character filling it.
 - `server.py`: the Pipecat voice server of `../README-VOICE.md` on port 7877.

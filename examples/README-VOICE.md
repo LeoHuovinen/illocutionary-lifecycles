@@ -45,8 +45,8 @@ The parameter `STTVendor` (the STT, such as `azure`) is required and has no defa
 
 ## The page
 
-`page/index.html`, with `ConnectConversation.js`, `PipecatVoiceAdapterWebRtcMount.js`, `pipecat-client.js` and `log.js`
-beside it in `page/` (copy the four from `examples/7-plasma-visualizer-pipecat/page/`):
+`page/index.html`, with `ConnectConversation.js`, `PipecatVoiceAdapterWebRtcMount.js` and `log.js`
+beside it in `page/` (copy the three from `examples/7-plasma-visualizer-pipecat/page/`):
 
 ```html
 <!doctype html>
