@@ -40,6 +40,9 @@ introduces the remembered answers, either one string or a mapping from condition
 ``ConversationStateInitBundle["PromptBlocks"]``, the heading ``PragmaticState.Composer`` prints above the current
 conversation state's utterances and the note it prints while the user has not yet spoken in that conversation state,
 and ``PragmaticState.Composer`` prints its own heading and note when the keys are absent.
+``SessionProvider.SetNonconversationalContentSocket`` places one text that neither the user nor the assistant said,
+such as a summary of the closed captions of a video they are watching together, on the pragmatic field
+``pNonconversationalContentSocketState``, and an empty text removes it.
 ``SessionProvider.ApplyPromptChange`` replaces the value of one key of ``ConversationStateInitBundle["PromptBlocks"]``
 while the conversation runs, and adds one ``ManualPromptChangeEvent`` to ``SystemState.Record``, holding ``block_key``,
 ``block_sub_key``, ``previous_value``, ``value`` and ``source``.

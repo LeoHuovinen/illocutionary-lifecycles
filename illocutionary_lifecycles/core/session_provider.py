@@ -13,12 +13,13 @@ adapter in the same folder passes every call to it, and the provider reaches ``S
 every turn and writes every event to the record in the folder ``memory``. A process that serves several conversations
 holds one provider for each.
 
-The calls an adapter makes fall into six kinds. ``ResponseProcessing`` gives the session one finished user utterance and
-returns the reply. ``TTSUtteranceSave`` saves an assistant reply once it has been delivered. ``set_ignore_memories``
+The calls an adapter makes fall into seven kinds. ``ResponseProcessing`` gives the session one finished user utterance
+and returns the reply. ``TTSUtteranceSave`` saves an assistant reply once it has been delivered. ``set_ignore_memories``
 and ``SetQuestionAnswerHook`` switch two settings. ``ConversationHistoryWindow`` and ``ConversationHistoryTurns`` read
 the recorded utterances. ``IncrementalPhraseTick`` hands over the speech so far while the user is still speaking,
 schedules the incremental settle and never waits for it, so a reply is never delayed by it. ``ApplyPromptChange``
-replaces one authored prompt block while the conversation runs.
+replaces one authored prompt block while the conversation runs. ``SetNonconversationalContentSocket`` places one text
+that neither the user nor the assistant said, for the composer and the analyzers to read.
 
 When a user utterance moves the conversation to another state, the provider has the new state process the same
 utterance through ``SystemState.EstablishConversationStateAndFirstReply``, passing the utterance's refresh index as
@@ -427,6 +428,17 @@ class SessionProvider:
         if self.SystemState is None:
             return False
         return self.SystemState.set_ignore_memories(bool(Enabled))
+
+    def SetNonconversationalContentSocket(self, Content: str) -> bool:
+        """Place ``Content`` as the session's nonconversational content, or remove it when ``Content`` is empty, and
+        return whether it was applied, which is false before ``start``.
+
+        The call is passed to ``SystemState.SetNonconversationalContentSocket``, which sets or deletes the pragmatic
+        field ``pNonconversationalContentSocketState`` and explains what the content is for. A server calls this on
+        the provider it receives in a mount's ``OnSessionOpened``, at any moment of the conversation."""
+        if self.SystemState is None:
+            return False
+        return self.SystemState.SetNonconversationalContentSocket(Content)
 
     def SetQuestionAnswerHook(self, Enabled: bool) -> bool:
         """Set ``SystemState.QuestionAnswerHook`` to ``Enabled`` and return true, or return false before ``start``.

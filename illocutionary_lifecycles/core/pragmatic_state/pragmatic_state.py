@@ -14,11 +14,12 @@ analyzers, its turn count and the incremental picks. Which states exist and how 
 
 A field's name has the form p, then what it holds, then State, and the field exists only while it applies, so a state
 without questions has no remaining-questions field. ``pConversationState`` and ``pConversationStateRemainingQuestions``
-are the two names without the State ending. Three things write the fields. ``SystemState.EstablishConversationState``
+are the two names without the State ending. Four things write the fields. ``SystemState.EstablishConversationState``
 writes a state's fields when the state is entered,
-``illocutionary_lifecycles.core.pragmatic_state.refresher.refresh`` updates them after analyzers have run, and
+``illocutionary_lifecycles.core.pragmatic_state.refresher.refresh`` updates them after analyzers have run,
 ``SystemState.set_ignore_memories`` sets or deletes ``pIgnoreMemoriesState`` when the remembered answers are switched
-off or on. Every other
+off or on, and ``SystemState.SetNonconversationalContentSocket`` sets or deletes
+``pNonconversationalContentSocketState`` when a server places or removes its content. Every other
 module only reads them, and nothing in the code prevents another write, so a new write elsewhere is a defect. The
 fields that start with p are saved as a ``PragmaticStatesEvent`` after every refresh, and a prompt block may hold any
 of them as a blank in braces.
@@ -124,8 +125,10 @@ class PragmaticState:
     waiting. ``pIncrementalPhraseInstancesState`` holds the state's declared incremental instances.
     ``pCategoricalAnswerState`` holds the options chosen in the current state, set by the refresher.
     ``pIgnoreMemoriesState`` is set while remembered answers are kept out of the prompt, by
-    ``SystemState.set_ignore_memories``. A field named p, then an analyzer's registered name, then State holds what
-    that incremental analyzer last returned, by instance identifier, set by the refresher.
+    ``SystemState.set_ignore_memories``. ``pNonconversationalContentSocketState`` holds one text a server placed that
+    neither speaker said, set by ``SystemState.SetNonconversationalContentSocket``. A field named p, then an
+    analyzer's registered name, then State holds what that incremental analyzer last returned, by instance identifier,
+    set by the refresher.
     """
 
     pConversationState: int = 0

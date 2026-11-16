@@ -21,9 +21,10 @@ the state is entered. A state is an entry of ``ConversationStates`` keyed by its
 ``incremental_phrase_instances``. A state without ``ConversationStateTransitionCriteria`` is an ending that the
 conversation never leaves.
 
-Two things write the pragmatic fields, this class, when a state is entered and when ``set_ignore_memories`` switches
-the remembered answers off or on, and ``illocutionary_lifecycles.core.pragmatic_state.refresher.refresh`` after
-analyzers have run, and everything else only reads them. The refresher moves the conversation by calling
+Two things write the pragmatic fields, this class, when a state is entered, when ``set_ignore_memories`` switches
+the remembered answers off or on and when ``SetNonconversationalContentSocket`` places or removes a server's content,
+and ``illocutionary_lifecycles.core.pragmatic_state.refresher.refresh`` after analyzers have run, and everything else
+only reads them. The refresher moves the conversation by calling
 ``set_current_conversation_state``, and ``SessionProvider.ResponseProcessing`` then has the new state reply by calling
 ``EstablishConversationStateAndFirstReply``. The two methods ``ResponseProcessing`` and ``ComposeCurrentPrompt`` hold
 no logic here and call the functions of the same names in
@@ -641,4 +642,29 @@ class SystemState:
             self.PragmaticState.pIgnoreMemoriesState = True
         elif hasattr(self.PragmaticState, "pIgnoreMemoriesState"):
             del self.PragmaticState.pIgnoreMemoriesState
+        return True
+
+    def SetNonconversationalContentSocket(self, Content: str) -> bool:
+        """Set the pragmatic field ``pNonconversationalContentSocketState`` to ``Content`` with surrounding spaces
+        removed, delete the field when ``Content`` is empty, and return true, or return false before the pragmatic
+        state exists.
+
+        The field holds one text the server places for the session, which neither the user nor the assistant said. A
+        server uses it to send things like summaries of the closed captions of media the user and the assistant
+        share, such as a video being watched, a screen being browsed or events in a VR scene. The content is shown
+        to the model wherever the flow's authored text holds the field's name in braces, so a conversation state
+        whose text does not hold the name does not show it, and it is handed with the pragmatic state to every
+        analyzer, those that run on a finished turn and those that run on the speech so far. The analyzers shipped
+        in the package do not read it. A new placement replaces the one before, the content stays through a move
+        to another conversation state until the server replaces or removes it, and it is saved with the other
+        pragmatic values after every refresh. The name is best given a line of its own in the authored text,
+        because the words around it stay when the field is absent. Called by
+        ``SessionProvider.SetNonconversationalContentSocket``."""
+        if self.PragmaticState is None:
+            return False
+        Content = str(Content or "").strip()
+        if Content:
+            self.PragmaticState.pNonconversationalContentSocketState = Content
+        elif hasattr(self.PragmaticState, "pNonconversationalContentSocketState"):
+            del self.PragmaticState.pNonconversationalContentSocketState
         return True
