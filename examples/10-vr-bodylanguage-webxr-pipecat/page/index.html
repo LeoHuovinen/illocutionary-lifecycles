@@ -1,0 +1,134 @@
+<!doctype html>
+<!-- A spoken yes or no question in a VR headset, answered by voice, by a head nod or by a head shake, talking
+     through IL's Pipecat voice mount. A pause in the user's speech ends their turn. Head nods and head shakes are
+     recognised by Google XR Blocks' HeadGestureRecognition with its default options, and each one joins the person's
+     turn as a line of text. The page's parts appear as flat panels in a WebXR session through xr_panels.js from
+     ../9-vrm-webxr-pipecat. The two pictures are Google's Material Symbols face_nod and face_shake, under Apache-2.0.
+     Read README.md. -->
+<meta charset="utf-8">
+<!-- One copy of three.js for the whole page. xr_panels.js from Illocutionary Lifecycles asks for 0.180.0, and XR Blocks needs 0.186, so 0.180.0 is loaded as 0.186.0. -->
+<script type="importmap">{ "imports": { "https://esm.sh/three@0.180.0": "https://esm.sh/three@0.186.0" } }</script>
+<title>Head nod and head shake</title>
+<style>body{margin:0;height:100vh;background:#101018;color:#ddd;font:14px system-ui;overflow:hidden}
+#gestures{position:absolute;top:12px;left:12px;width:480px;box-sizing:border-box;display:flex;justify-content:center;gap:12px;z-index:2}
+#gestures figure{margin:0;padding:8px;width:120px;text-align:center;background:#2a2d33;border-radius:12px;border:4px solid transparent}
+#gestures figure.on{border-color:#e5e7eb;background:#4b5563}
+#gestures svg{width:100%;height:auto;display:block}#gestures figcaption{font-weight:700;color:#e5e7eb}
+#tts,#stt,#history{position:absolute;left:12px;width:480px;box-sizing:border-box;padding:8px;background:#2a2d33;border-radius:12px;overflow:hidden}
+#tts,#stt{height:calc(14px * 1.25 + 16px);display:flex;align-items:center}#tts{top:200px}#stt{top:240px}#history{top:348px;height:150px;display:flex;flex-direction:column;justify-content:flex-end}
+#tts .karaoke,#stt .karaoke{position:static;padding:0;width:100%}#tts .user,#stt .bot{display:none}
+#history div{padding:2px 0;color:#e5e7eb}#history .bot{color:#9ca3af}</style>
+<div id="gestures">
+  <figure id="nod"><svg fill="#d1d5db" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960"><path d="M360-160q-132 0-224.5-92.5T43-477q0-132 92.5-224.5T360-794q132 0 224.5 92.5T677-477q0 132-92.5 224.5T360-160Zm0-60q107.08 0 182.04-74.96T617-477q0-16-2.5-31.5T609-540q-11 2-22.5 3t-22.5 1q-75 4-142-25.5T305-648q-29 62-83 104.5T103-482v3q-1 108 74 183.5T360-220Zm-99-181q-17 0-28.5-11.5T221-441q0-17 11.5-28.5T261-481q17 0 28.5 11.5T301-441q0 17-11.5 28.5T261-401Zm199 0q-16.58 0-27.79-11.5T421-441q0-17 11.21-28.5T460-481q17.42 0 29.21 11.5T501-441q0 17-11.79 28.5T460-401ZM271-718q-56 23-96.5 66.5T115-551q57-20 96.5-65T271-718Zm86-16q-11 0-22 1.5t-22 4.5q45 58 106.5 96T553-595q8 0 16.5-.5T586-598q-35-63-96-100t-133-36Zm-86 16Zm42-10ZM690-80v-190h40v143q66-75 108-164t42-189q0-100-42-189T730-833v143h-40v-190h190v40H777q63 78 103 169t40 191q0 100-40 191T777-120h103v40H690Z"/></svg><figcaption>Nod: yes</figcaption></figure>
+  <figure id="shake"><svg fill="#d1d5db" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960"><path d="M289-80q-91-40-169-103v103H80v-190h190v40H127q75 66 164 108t189 42q100 0 189-42t164-108H690v-40h190v190h-40v-103q-78 63-169 103T480-40q-100 0-191-40Zm188-205q-132 0-224.5-92.5T160-602q0-132 92.5-224.5T477-919q132 0 224.5 92.5T794-602q0 132-92.5 224.5T477-285Zm0-60q107.08 0 182.04-74.67Q734-494.33 734-601q0-16-2.5-31.5T726-664q-11 2-22.5 2.5T681-660q-75 3-142-26t-117-86q-29 62-83 104t-119 61v3q-1 108 74 183.5T477-345ZM377-525q-17 0-28.5-11.5T337-565q0-17 11.5-28.5T377-605q17 0 28.5 11.5T417-565q0 17-11.5 28.5T377-525Zm200 0q-17 0-28.5-11.5T537-565q0-17 11.5-28.5T577-605q17 0 28.5 11.5T617-565q0 17-11.5 28.5T577-525ZM388-843q-56 23-96.5 66.5T232-676q57-20 96.5-65T388-843Zm86-16q-11 0-22 2t-22 5q45 58 106.5 95.5T670-720q8 0 16.5-.5T703-723q-35-63-96-100t-133-36Zm-86 16Zm42-10Z"/></svg><figcaption>Shake: no</figcaption></figure>
+</div>
+<div id="tts"><div class="kara"></div></div><div id="stt"><div class="kara"></div></div><div id="history"></div>
+<script type="module">
+  import "./log.js";                             // the two log streams, in the browser console: recorded events and adapter callbacks, each on its own
+  import * as THREE from "https://esm.sh/three@0.186.0";
+  import { VRButton } from "https://esm.sh/three@0.186.0/examples/jsm/webxr/VRButton.js";
+  import { HeadGestureRecognition, HeadGestureRecognitionOptions } from "https://esm.sh/xrblocks@0.24.0?deps=three@0.186.0";   // head nods and head shakes from the headset's pose
+  import { ConnectConversation } from "./ConnectConversation.js";
+  import { Karaoke } from "./vr/karaoke.js";                // the karaoke, the assistant's words as spoken and the person's as heard
+  import { XrPanels } from "./vr/xr_panels.js";             // the page's parts as panels in WebXR
+
+  // The scene sits 0.6 m in front of the viewer, with four panels stacked straight ahead in it. From the top they show
+  // the two gesture pictures, the assistant's speech, the person's speech as heard, and the chat history.
+  // Every panel is WIDTH wide. The top panel's top edge is at TOP, and each next panel starts GAP below the one above.
+  const PLACES = { scene: { x: 0, y: 0, z: -0.6 } }, WIDTH = 0.55, TOP = 1.92, GAP = 0.01;
+  let edge = TOP;
+  for (const id of ["gestures", "tts", "stt", "history"]) {
+    const el = document.getElementById(id), height = WIDTH * el.offsetHeight / el.offsetWidth;
+    PLACES[id] = { x: 0, y: edge - height / 2, z: 0, tilt: 0, turn: 0, width: WIDTH };
+    edge -= height + GAP;
+  }
+  // The line of text the page sends for each head gesture. A gesture with no entry is not sent.
+  // XR Blocks also reports each gesture's confidence, size, duration, speed and first direction, which this page does not
+  // use yet, so a line could later say how a gesture was made as well as which one it was.
+  const HeadGestureLines = { nod: "[nod head gesture for yes]", shake: "[shake head gesture for no]" };
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.xr.enabled = true; document.body.append(renderer.domElement, VRButton.createButton(renderer));
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(28, innerWidth / innerHeight, 0.1, 20);
+  renderer.xr.addEventListener("sessionstart", () => scene.position.set(PLACES.scene.x, PLACES.scene.y, PLACES.scene.z));
+  renderer.xr.addEventListener("sessionend", () => scene.position.set(0, 0, 0));
+
+  const karaoke = Karaoke([...document.querySelectorAll(".kara")], {   // the page's 14 px font, in light greys for the dark panels
+    botFontSize: "14px", botWordsColour: "#f3f4f6", botTextOutline: "0 1px 6px #000000a6",
+    personFontSize: "14px", personWordsColour: "#d1d5db", personTextOutline: "0 1px 6px #00000099",
+  });
+  // The chat history has one line per turn. Everything the person says or does before the assistant answers joins one line.
+  const history = document.getElementById("history");
+  const line = (who, text) => {
+    const last = history.lastElementChild;
+    if (last?.className === who) { last.dataset.text += ` ${text}`; } else { history.append(Object.assign(document.createElement("div"), { className: who })); history.lastElementChild.dataset.text = text; }
+    const row = history.lastElementChild; row.textContent = `${who === "bot" ? "Assistant" : "You"}: ${row.dataset.text}`;
+    while (history.children.length > 8) history.firstChild.remove();
+  };
+
+  // The picture of a gesture is highlighted for HeadGestureHighlightMs when the server sends its line back, which is when the
+  // line has joined the person's turn. A line with no picture lights nothing.
+  const HeadGestureHighlightMs = 2000;
+  let highlightTimer = 0;
+  const highlight = (name) => {
+    const pictures = [...document.querySelectorAll("#gestures figure")];
+    for (const picture of pictures) picture.classList.toggle("on", picture.id === name);
+    clearTimeout(highlightTimer); highlightTimer = setTimeout(() => pictures.forEach((picture) => picture.classList.remove("on")), HeadGestureHighlightMs);
+  };
+
+  // The person's panel shows the whole current turn in the order the server joins it. Every finished piece, a final
+  // transcription or a line the server sends back, is added in arrival order, and the partial text being heard now
+  // follows them. So a gesture made in the middle of a sentence shows before that sentence, as the model reads it.
+  // Every piece arrives as finished text, so a later piece never replaces an earlier one, and a detection that changes
+  // its mind sends a new line.
+  let turnPieces = [];
+  const show = (text, final) => karaoke.userMessage([...turnPieces, text].filter(Boolean).join(" "), final);
+  const karaokeTurn = {
+    ...karaoke,
+    userMessage: (text, final) => {
+      const t = text?.trim(); if (!t) return;
+      if (final === false) { show(t, false); return; }
+      const gesture = Object.keys(HeadGestureLines).find((name) => HeadGestureLines[name] === t);
+      if (gesture) highlight(gesture);
+      turnPieces.push(t); line("you", t); show("", true);
+    },
+    botMessage: (text) => { turnPieces = []; karaoke.botMessage(text); },
+  };
+  const chat = { botMessage: (text) => { if (text?.trim()) line("bot", text.trim()); } };
+
+  const panels = XrPanels({ scene, renderer });
+  panels.add(document.getElementById("gestures"), PLACES.gestures);
+  for (const id of ["tts", "stt", "history"]) panels.add(document.getElementById(id), PLACES[id]);
+
+  // XR Blocks' head gesture recognition, reading the pose of the headset's camera. It takes the page's clock,
+  // performance.now, on every frame, so the moment a gesture ended is known on that clock and could travel with its line.
+  const gestures = new HeadGestureRecognition();
+  await gestures.init({ camera: renderer.xr.getCamera(), options: new HeadGestureRecognitionOptions().enable() });
+  // The render loop runs once per headset frame. Each frame gives the headset's pose, which the gesture recogniser reads
+  // and which head direction and movement could also be read from. Hands and controllers would be read in the same loop.
+  renderer.setAnimationLoop(() => {
+    renderer.render(scene, camera);
+    if (renderer.xr.isPresenting) gestures.update(performance.now());
+  });
+
+  // Each recognised gesture that has a line is sent as a typed line, which joins the person's spoken turn on the
+  // server. The same gesture within HeadGestureHoldMs of its last sending is dropped, while a different gesture is sent,
+  // so a shake that corrects a nod is never lost.
+  // The server also takes a client message for the session calls IncrementalPhraseTick and
+  // SetNonconversationalContentSocket, posted to /OnClientMessage. Nothing on this page sends one yet.
+  // Detecting, choosing the line and sending stay together in this one listener, so another kind of detection, such as
+  // head direction or the hands, can be added as a listener of its own beside it.
+  let conversation = null;
+  const HeadGestureHoldMs = 2000, HeadGestureLastSentAt = {};
+  gestures.addEventListener("gesture", (e) => {
+    const name = e.detail?.name, text = HeadGestureLines[name], now = performance.now();
+    if (!text || now - (HeadGestureLastSentAt[name] ?? -Infinity) < HeadGestureHoldMs) return;
+    HeadGestureLastSentAt[name] = now;
+    conversation?.sendText(text);
+  });
+
+  // The views also receive the conversation's phase, listening, thinking or speaking, which this page does not use yet.
+  renderer.xr.addEventListener("sessionstart", async () => {
+    if (!conversation) conversation = await ConnectConversation({ way: "voice", views: [karaokeTurn, chat] });
+  });
+</script>

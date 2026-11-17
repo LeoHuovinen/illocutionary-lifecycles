@@ -4,7 +4,7 @@ Numbered by the mount they run on, each giving a page everything the one before 
 page's `ConnectConversation.js` lists what): the text WebSocket mount, then the press-to-speak WebSocket mount, then the
 Pipecat WebRTC voice mount. The order is also the order of what a page can do. Each folder from `0-text` to `7-plasma-visualizer-pipecat` is a
 server (`server.py`), a page folder (`page/`) with IL's browser scripts beside the page, and the conversation
-(`flow.json`). `8-side-by-side` reuses the pages and flow of the others. `9-vrm-webxr-pipecat` has the same three parts.
+(`flow.json`). `8-side-by-side` reuses the pages and flow of the others. `9-vrm-webxr-pipecat` and `10-vr-bodylanguage-webxr-pipecat` have the same three parts.
 
 | | example | mount | open after `python server.py` |
 |---|---|---|---|
@@ -18,6 +18,7 @@ server (`server.py`), a page folder (`page/`) with IL's browser scripts beside t
 | 7 | `7-plasma-visualizer-pipecat`: Pipecat's Plasma visualizer on the assistant's audio | Pipecat WebRTC voice | `http://127.0.0.1:7873/page/` |
 | 8 | `8-side-by-side`: any of the pages above next to each other, over one conversation | Pipecat if any page uses it, else press-to-speak, else text | `http://127.0.0.1:7880/page/` |
 | 9 | `9-vrm-webxr-pipecat`: a VRM character in a VR headset | Pipecat WebRTC voice | `http://127.0.0.1:7882/page/` |
+| 10 | `10-vr-bodylanguage-webxr-pipecat`: a yes or no question in a VR headset, answered by voice, a head nod or a head shake | Pipecat WebRTC voice | `http://127.0.0.1:7883/page/` |
 
 Four guides beside this file show how to write such a server and page yourself, `README-TEXT.md`, `README-PRESS.md`,
 `README-VOICE.md` and `README-VRM.md`. Each example's own `README.md` covers only what that example adds.

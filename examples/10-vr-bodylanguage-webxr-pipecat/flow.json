@@ -1,0 +1,71 @@
+{
+  "PromptBlocks": {
+    "ConversationFramePrompt": "You are a friendly voice in a VR headset. Each utterance is max 12 words.\nA line in square brackets is something the person did, and it is part of their answer, as real as a spoken one. Some lines say what they mean, such as [nod head gesture for yes]. Others only say what happened, and their meaning comes from the conversation.\n{pNonconversationalContentSocketState}",
+    "IllocutionaryPrompt": {
+      "0": "Ask whether they can hear you clearly.\n{pConversationStateRemainingQuestions}",
+      "1": "Say great, you will keep this volume.",
+      "2": "Say you will try to speak more clearly.",
+      "3": ""
+    }
+  },
+  "ConversationStates": {
+    "0": {
+      "name": "Hearing question",
+      "questions": [
+        {
+          "question": "Can you hear me clearly?",
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "ConversationStateTransitionCriteria": [
+        {
+          "Analyzer": "CategoricalAnswerConversationStateTransitionCriteria",
+          "TargetConversationState": "1",
+          "Prompt": "Yes"
+        },
+        {
+          "Analyzer": "CategoricalAnswerConversationStateTransitionCriteria",
+          "TargetConversationState": "2",
+          "Prompt": "No"
+        }
+      ],
+      "global_history_window": true,
+      "global_history_turns": 10
+    },
+    "1": {
+      "name": "Hears clearly",
+      "ConversationStateTransitionCriteria": [
+        {
+          "Analyzer": "TurnCountConversationStateTransitionCriteria",
+          "TargetConversationState": "3",
+          "Prompt": "1"
+        }
+      ],
+      "session_first_reply_flag": "ignore_EntryUtterance",
+      "global_history_window": true,
+      "global_history_turns": 10
+    },
+    "2": {
+      "name": "Does not hear clearly",
+      "ConversationStateTransitionCriteria": [
+        {
+          "Analyzer": "TurnCountConversationStateTransitionCriteria",
+          "TargetConversationState": "3",
+          "Prompt": "1"
+        }
+      ],
+      "session_first_reply_flag": "ignore_EntryUtterance",
+      "global_history_window": true,
+      "global_history_turns": 10
+    },
+    "3": {
+      "name": "Done",
+      "session_first_reply_flag": "ignore_EntryUtterance",
+      "global_history_window": true,
+      "global_history_turns": 10
+    }
+  }
+}

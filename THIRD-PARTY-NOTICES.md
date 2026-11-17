@@ -27,13 +27,17 @@ No VRM or Rive character is shipped. Each example's `README.md` gives the downlo
 
 ## Libraries loaded when a page opens
 
-`PipecatVoiceAdapterWebRtcMount.js` in `examples/5-vrm-pipecat/page/`, `6-rive-pipecat/page/`, `7-plasma-visualizer-pipecat/page/`, `8-side-by-side/page/` and `9-vrm-webxr-pipecat/page/` bundles nothing. When the page opens, it imports `@pipecat-ai/client-js` 1.13.1 and `@pipecat-ai/small-webrtc-transport` 1.10.8 from esm.sh, the transport built against that same client, and those bring their own dependencies, among them `@daily-co/daily-js`, `bowser`, `events`, `lodash` and `uuid`. Each stays under its own licence, and their texts are below.
+`PipecatVoiceAdapterWebRtcMount.js` in `examples/5-vrm-pipecat/page/`, `6-rive-pipecat/page/`, `7-plasma-visualizer-pipecat/page/`, `8-side-by-side/page/`, `9-vrm-webxr-pipecat/page/` and `10-vr-bodylanguage-webxr-pipecat/page/` bundles nothing. When the page opens, it imports `@pipecat-ai/client-js` 1.13.1 and `@pipecat-ai/small-webrtc-transport` 1.10.8 from esm.sh, the transport built against that same client, and those bring their own dependencies, among them `@daily-co/daily-js`, `bowser`, `events`, `lodash` and `uuid`. Each stays under its own licence, and their texts are below.
 
 `pipecat_plasma.js` in `examples/7-plasma-visualizer-pipecat/page/` bundles nothing. When the page opens, it imports `@pipecat-ai/voice-ui-kit` 0.14.1, `react` 18.3.1 and `react-dom` 18.3.1 from esm.sh, and those bring their own dependencies. Each stays under its own licence, and `LICENSE-voice-ui-kit.txt` beside the file gives voice-ui-kit's.
 
 `pipecat_vrm.js` in `examples/3-vrm-press-to-speak/page/`, `5-vrm-pipecat/page/` and `9-vrm-webxr-pipecat/page/` bundles nothing. When the page opens, it imports `three` 0.180.0 (r180) with its `GLTFLoader` and `@pixiv/three-vrm` 3.5.5 from esm.sh, and those bring their own dependencies. In `9-vrm-webxr-pipecat/page/` it also imports three.js's `VRButton` from the same `three` 0.180.0. Each stays under its own licence, and the texts for three.js and three-vrm are below.
 
 `xr_panels.js` in `examples/9-vrm-webxr-pipecat/page/` bundles nothing. When the page opens, it imports `three` 0.180.0 and `modern-screenshot` 4.6.0 (MIT, https://github.com/qq15725/modern-screenshot) from esm.sh, each under its own licence.
+
+`examples/10-vr-bodylanguage-webxr-pipecat/page/index.html` bundles nothing. When the page opens, it imports `three` 0.186.0 with its `VRButton` and `xrblocks` 0.24.0 (Apache-2.0, https://github.com/google/xrblocks) from esm.sh, and those bring their own dependencies. Its import map loads the `three` 0.180.0 that `xr_panels.js` asks for as 0.186.0, so the page holds one copy. Each stays under its own licence.
+
+The two pictures inlined in `examples/10-vr-bodylanguage-webxr-pipecat/page/index.html` are Google's Material Symbols `face_nod` and `face_shake` (Apache-2.0, https://github.com/google/material-design-icons), unchanged.
 
 ## Licence texts
 
