@@ -13,13 +13,15 @@ adapter in the same folder passes every call to it, and the provider reaches ``S
 every turn and writes every event to the record in the folder ``memory``. A process that serves several conversations
 holds one provider for each.
 
-The calls an adapter makes fall into seven kinds. ``ResponseProcessing`` gives the session one finished user utterance
+The calls an adapter makes fall into eight kinds. ``ResponseProcessing`` gives the session one finished user utterance
 and returns the reply. ``TTSUtteranceSave`` saves an assistant reply once it has been delivered. ``set_ignore_memories``
 and ``SetQuestionAnswerHook`` switch two settings. ``ConversationHistoryWindow`` and ``ConversationHistoryTurns`` read
 the recorded utterances. ``IncrementalPhraseTick`` hands over the speech so far while the user is still speaking,
 schedules the incremental settle and never waits for it, so a reply is never delayed by it. ``ApplyPromptChange``
 replaces one authored prompt block while the conversation runs. ``SetNonconversationalContentSocket`` places one text
-that neither the user nor the assistant said, for the composer and the analyzers to read.
+that neither the user nor the assistant said, for the composer and the analyzers to read. ``ApplyStateChange``, a later
+addition that does nothing unless the server set ``FlowChangeAllowed``, writes one conversation state of the running
+flow.
 
 When a user utterance moves the conversation to another state, the provider has the new state process the same
 utterance through ``SystemState.EstablishConversationStateAndFirstReply``, passing the utterance's refresh index as
@@ -439,6 +441,22 @@ class SessionProvider:
         if self.SystemState is None:
             return False
         return self.SystemState.SetNonconversationalContentSocket(Content)
+
+    def ApplyStateChange(self, key: str, entry: dict, prompt: str, source: str = "") -> tuple[bool, str]:
+        """Write the conversation state ``key`` of the running flow with ``entry`` and ``prompt``, and return whether
+        it was applied together with the reason when it was not, or false with "the session has not started" before
+        ``start``.
+
+        NOTE: You will only need this during dynamic dialogue tree construction, during an ongoing conversation
+        session. Only use this feature if you genuinely need a complicated, dynamic conversation, rather than a
+        structured or planned one.
+
+        The call is passed to ``SystemState.ApplyStateChange``, whose docstring describes the branch structure it is
+        made for, the setting ``FlowChangeAllowed`` it needs and what it refuses. A server calls this on the provider
+        it receives in a mount's ``OnSessionOpened``, between turns."""
+        if self.SystemState is None:
+            return False, "the session has not started"
+        return self.SystemState.ApplyStateChange(key, entry, prompt, source=source)
 
     def SetQuestionAnswerHook(self, Enabled: bool) -> bool:
         """Set ``SystemState.QuestionAnswerHook`` to ``Enabled`` and return true, or return false before ``start``.

@@ -19,7 +19,9 @@ the state is entered. A state is an entry of ``ConversationStates`` keyed by its
 ``name``, ``questions``, ``ConversationStateTransitionCriteria``, ``Analyzers``, ``permissive_after_turns``,
 ``ignore_memories``, ``global_history_window``, ``global_history_turns``, ``session_first_reply_flag`` and
 ``incremental_phrase_instances``. A state without ``ConversationStateTransitionCriteria`` is an ending that the
-conversation never leaves.
+conversation never leaves. The flow stays as it started unless the server sets ``FlowChangeAllowed``, a later addition
+after which ``ApplyStateChange`` may write states other than the current one while the conversation runs, as its
+docstring explains.
 
 Two things write the pragmatic fields, this class, when a state is entered, when ``set_ignore_memories`` switches
 the remembered answers off or on and when ``SetNonconversationalContentSocket`` places or removes a server's content,
@@ -36,6 +38,7 @@ Reading a finished session is unaffected; resuming one with a writing vendor is 
 """
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -87,6 +90,10 @@ class SystemState:
     # This must be a declared field. ``ConversationInit`` applies a setting only when
     # SystemState already has an attribute of that name.
     QuestionAnswerHook: bool = False
+
+    # Whether ``ApplyStateChange`` may change the running flow, a declared field for the same reason. False when the
+    # server does not set it, so a session that does not ask for flow changes runs as before.
+    FlowChangeAllowed: bool = False
 
     global_history_window: bool = False
     global_history_turns: int = 10
@@ -206,6 +213,12 @@ class SystemState:
         ``illocutionary_lifecycles.memory.memory.Memory.reinit_log_from_disk``. Called by
         ``illocutionary_lifecycles.core.ConversationInit.ConversationInit``, which stores the handed-in flow only when this
         returns false.
+
+        After the stored flow is recovered, every ``FlowChangeEvent`` in the record is applied to it in the order it
+        was recorded, so a reopened session runs the flow as it last was and not as it started. This rebuilds the
+        flow only. No turn is run again and the conversation's position is not restored. A record made without
+        ``FlowChangeAllowed`` holds no such event, and the flow is recovered as before. The events are applied whatever
+        the setting is now, because this runs before the settings are applied.
         """
         if self.Record is None:
             return False
@@ -213,6 +226,9 @@ class SystemState:
         if not events:
             return False
         self.ConversationStateInitBundle = dict(events[-1].get("values", {}) or {})
+        for change in self.Record.read_cache.streams().get("FlowChangeEvent") or []:
+            self._PutStateIntoFlow(str(change.get("state_key")), copy.deepcopy(change.get("entry")), change.get("prompt"),
+                                   with_states=False)
         return True
 
     def PromptBlocks(self) -> dict[str, Any]:
@@ -263,6 +279,85 @@ class SystemState:
         return self.Record.UpsertManualPromptChangeEvent(
             str(block_key), block_sub_key, previous_value, value, source=str(source or ""),
         )
+
+    def ApplyStateChange(self, key: str, entry: dict, prompt: str, source: str = "") -> tuple[bool, str]:
+        """Write the conversation state ``key`` of the running flow, a new state or a replacement, with ``entry`` as
+        its entry under ``ConversationStates`` and ``prompt`` as its entry under ``PromptBlocks["IllocutionaryPrompt"]``,
+        and return whether it was applied together with the reason when it was not.
+
+        NOTE: You will only need this during dynamic dialogue tree construction, during an ongoing conversation
+        session. Only use this feature if you genuinely need a complicated, dynamic conversation, rather than a
+        structured or planned one.
+
+        This is a later addition to the package. A flow was first fixed for the whole session, and everything else in
+        this class still works as if it were, because the class reads the flow only by key at the moment it needs it,
+        when it moves to a state, when it enters one and when it composes a prompt. The method does nothing and
+        returns false unless the setting ``FlowChangeAllowed`` is true, which a server sets through the provider's
+        ``InitSystemSetterSettings`` and which is false when absent, so a session that does not ask for it runs
+        exactly as before.
+
+        The branch structure the method is made for has three kinds of state. Core states are the flow as it was
+        written, and their exits stay as written. A doorway state is a state a core state leads to by a fixed exit,
+        and its own exits lead to branches, so a server grows the conversation by rewriting the doorway while the
+        conversation is elsewhere. Branch states are added by the server, each leading back to a core state when it
+        is done. The branches are written first and their doorway after them, because every target must already
+        exist. The doorway's ``session_first_reply_flag`` decides how it is entered. "ignore_EntryUtterance" makes it
+        ask which branch to take, a confirmation step, and no flag makes it process the same utterance at once, so a
+        user who already named one branch passes straight into it within the same turn.
+
+        The current state is never changed. The analyzers judge its exits on the copy ``EstablishConversationState``
+        made when it was entered, and ``illocutionary_lifecycles.core.pragmatic_state.refresher.refresh`` maps the
+        winning exit's position back onto the live list, so a list changed in place could send the conversation to the
+        wrong state. The method also refuses a key that is not a string of digits, an entry that is not a dict or whose
+        ``questions`` is not a list, an exit whose ``TargetConversationState`` is the state itself or names no existing
+        state, and an analyzer that is not registered. A change it accepts is recorded first, as a ``FlowChangeEvent``
+        written to the storage vendor through ``illocutionary_lifecycles.memory.memory.Memory.UpsertFlowChangeEvent``,
+        holding the new and the previous entry and prompt and ``source``, and only then put into
+        ``ConversationStateInitBundle`` and ``ConversationStates`` together. The record therefore holds the starting
+        flow and every change in order, and ``RecoverInit`` rebuilds the latest flow from them when the session is
+        reopened. Called by ``illocutionary_lifecycles.core.session_provider.SessionProvider.ApplyStateChange``.
+        """
+        key = str(key)
+        if not self.FlowChangeAllowed:
+            return False, "flow changes are not allowed in this session, set FlowChangeAllowed to allow them"
+        if self.Record is None or not isinstance(self.ConversationStateInitBundle, dict) or self.ConversationStates is None:
+            return False, "the session has not started"
+        if key == str(self.conversation_state):
+            return False, "the current conversation state is never changed"
+        if not key.isdigit():
+            return False, f"a state key is a string of digits, not {key!r}"
+        if not isinstance(entry, dict) or not isinstance(entry.get("questions", []), list):
+            return False, "an entry is a dict, and its 'questions' a list"
+        names = []
+        for criterion in entry.get("ConversationStateTransitionCriteria") or []:
+            target = criterion.get("TargetConversationState") if isinstance(criterion, dict) else None
+            if not isinstance(target, str) or target == key or target not in self.ConversationStates:
+                return False, f"the TargetConversationState {target!r} is not another existing state"
+            names.append(criterion.get("Analyzer"))
+        if entry.get("questions"):
+            names.append("QuestionCompleteCriteria")
+        names += [n for n in (entry.get("Analyzers") or []) if isinstance(n, str) and n.strip()]
+        from illocutionary_lifecycles.analyzers.AnalyzerBase import RequireAnalyzers
+        try:
+            RequireAnalyzers([n for n in names if n])
+        except LookupError as exc:
+            return False, str(exc)
+        previous_entry = self.ConversationStates.get(key)
+        previous_prompt = (self.PromptBlocks().get("IllocutionaryPrompt") or {}).get(key)
+        # Recorded and stored before the change takes effect, so no change of the flow goes unrecorded.
+        self.Record.UpsertFlowChangeEvent(key, entry, prompt, previous_entry, previous_prompt, source=source)
+        self._PutStateIntoFlow(key, copy.deepcopy(entry), prompt, with_states=True)
+        return True, ""
+
+    def _PutStateIntoFlow(self, key: str, entry: Any, prompt: Any, with_states: bool) -> None:
+        """Put ``entry`` under ``key`` in the flow's ``ConversationStates`` and ``prompt`` under ``key`` in its
+        ``IllocutionaryPrompt``, and in ``ConversationStates`` of this class too when ``with_states`` is true. Called by
+        ``ApplyStateChange`` and by ``RecoverInit``, which runs before ``ConversationStates`` is filled."""
+        bundle = self.ConversationStateInitBundle
+        bundle.setdefault("ConversationStates", {})[key] = entry
+        bundle.setdefault("PromptBlocks", {}).setdefault("IllocutionaryPrompt", {})[key] = prompt
+        if with_states:
+            self.ConversationStates[key] = entry
 
     def load_conversation_states_from_init(self) -> None:
         """Check the flow's shape, copy its ``ConversationStates`` into ``ConversationStates``, set

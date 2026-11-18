@@ -27,7 +27,8 @@ part of the stored record, so neither is renamed. The category names and field n
 ``illocutionary_lifecycles.server.adapter_callback_handlers.EventStreamReader`` and in ``EventCardReader`` and
 ``AdapterCallbackHandlerHelpers`` beside it in the folder ``server``, so a renamed class or field breaks them at run
 time. ``Memory`` does not interpret events, and the flow is held by ``SystemState`` and stored here once as a
-``ConversationInitEvent``.
+``ConversationInitEvent``. A session whose server set ``FlowChangeAllowed`` also records every later change to the
+flow as a ``FlowChangeEvent``, so the starting flow and those events give the flow at any point of the record.
 """
 from __future__ import annotations
 
@@ -232,6 +233,37 @@ class ManualPromptChangeEvent(ConversationEvent):
     block_sub_key: str | None = None
     previous_value: Any = None
     value: Any = None
+    source: str = ""
+
+
+@dataclass
+class FlowChangeEvent(ConversationEvent):
+    """The recorded event of one change to the running flow, written by ``Memory.UpsertFlowChangeEvent`` under a
+    refresh index of its own before the change takes effect. A later addition, present only in sessions whose server
+    set ``FlowChangeAllowed``.
+
+    NOTE: You will only need this during dynamic dialogue tree construction, during an ongoing conversation session.
+    Only use this feature if you genuinely need a complicated, dynamic conversation, rather than a structured or
+    planned one.
+
+    The branch structure this event serves, with core states, doorway states and branch states, the rule that the
+    current state is never changed, and the two ways a doorway is entered, is described in full in the docstring of
+    ``SystemState.ApplyStateChange`` in ``illocutionary_lifecycles/core/system_state/system_state.py``, the only
+    caller of the upsert.
+
+    ``state_key`` is the state written, ``entry`` and ``prompt`` its new entry and prompt, ``previous_entry`` and
+    ``previous_prompt`` what was there before, or ``None`` for a new state, and ``source`` the label the caller gave.
+    The starting flow and these events in order give the flow at any refresh index of the record, which
+    ``SystemState.RecoverInit`` uses to rebuild the latest flow when the session is reopened.
+    """
+
+    CATEGORY: ClassVar[str] = "FlowChangeEvent"
+
+    state_key: str = ""
+    entry: Any = None
+    prompt: Any = None
+    previous_entry: Any = None
+    previous_prompt: Any = None
     source: str = ""
 
 
@@ -456,6 +488,24 @@ class Memory:
         event = ManualPromptChangeEvent(
             block_key=str(block_key), block_sub_key=block_sub_key,
             previous_value=previous_value, value=value, source=str(source or ""),
+        )
+        idx = self._next_refresh_idx
+        event.event_refresh_idx = idx
+        self._next_refresh_idx += 1
+        self.append(event)
+        self.drain()
+        return idx
+
+    def UpsertFlowChangeEvent(self, state_key: str, entry: Any, prompt: Any, previous_entry: Any,
+                              previous_prompt: Any, source: str = "") -> int:
+        """Record one ``FlowChangeEvent`` with ``state_key``, deep copies of ``entry`` and ``previous_entry``,
+        ``prompt``, ``previous_prompt`` and ``source`` under a refresh index of its own, write it to the vendor at once,
+        and return that index. Called only by
+        ``illocutionary_lifecycles.core.system_state.system_state.SystemState.ApplyStateChange``, before the change takes
+        effect, as the class docstring of ``FlowChangeEvent`` in this module says."""
+        event = FlowChangeEvent(
+            state_key=str(state_key), entry=copy.deepcopy(entry), prompt=prompt,
+            previous_entry=copy.deepcopy(previous_entry), previous_prompt=previous_prompt, source=str(source or ""),
         )
         idx = self._next_refresh_idx
         event.event_refresh_idx = idx
