@@ -45,8 +45,7 @@ such as a summary of the closed captions of a video they are watching together, 
 ``pNonconversationalContentSocketState``, and an empty text removes it.
 ``SessionProvider.ApplyStateChange`` writes one conversation state of the running flow, a later addition that does
 nothing unless the server sets ``FlowChangeAllowed``. It refuses the current state, records the change as a
-``FlowChangeEvent`` before applying it, and is meant for growing a conversation through doorway states whose exits
-lead to new branches, as ``SystemState.ApplyStateChange`` describes. Only use it for a conversation that must be built
+``FlowChangeEvent`` before applying it, as ``SystemState.ApplyStateChange`` describes. Only use it for a conversation that must be built
 while it runs, not for one that can be planned.
 ``SessionProvider.ApplyPromptChange`` replaces the value of one key of ``ConversationStateInitBundle["PromptBlocks"]``
 while the conversation runs, and adds one ``ManualPromptChangeEvent`` to ``SystemState.Record``, holding ``block_key``,

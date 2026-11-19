@@ -227,8 +227,11 @@ class SystemState:
             return False
         self.ConversationStateInitBundle = dict(events[-1].get("values", {}) or {})
         for change in self.Record.read_cache.streams().get("FlowChangeEvent") or []:
-            self._PutStateIntoFlow(str(change.get("state_key")), copy.deepcopy(change.get("entry")), change.get("prompt"),
-                                   with_states=False)
+            if change.get("entry") is None:      # a removal, made only by ReplaceBranch
+                self._RemoveStateFromFlow(str(change.get("state_key")), with_states=False)
+            else:
+                self._PutStateIntoFlow(str(change.get("state_key")), copy.deepcopy(change.get("entry")),
+                                       change.get("prompt"), with_states=False)
         return True
 
     def PromptBlocks(self) -> dict[str, Any]:
@@ -296,15 +299,6 @@ class SystemState:
         ``InitSystemSetterSettings`` and which is false when absent, so a session that does not ask for it runs
         exactly as before.
 
-        The branch structure the method is made for has three kinds of state. Core states are the flow as it was
-        written, and their exits stay as written. A doorway state is a state a core state leads to by a fixed exit,
-        and its own exits lead to branches, so a server grows the conversation by rewriting the doorway while the
-        conversation is elsewhere. Branch states are added by the server, each leading back to a core state when it
-        is done. The branches are written first and their doorway after them, because every target must already
-        exist. The doorway's ``session_first_reply_flag`` decides how it is entered. "ignore_EntryUtterance" makes it
-        ask which branch to take, a confirmation step, and no flag makes it process the same utterance at once, so a
-        user who already named one branch passes straight into it within the same turn.
-
         The current state is never changed. The analyzers judge its exits on the copy ``EstablishConversationState``
         made when it was entered, and ``illocutionary_lifecycles.core.pragmatic_state.refresher.refresh`` maps the
         winning exit's position back onto the live list, so a list changed in place could send the conversation to the
@@ -348,6 +342,112 @@ class SystemState:
         self.Record.UpsertFlowChangeEvent(key, entry, prompt, previous_entry, previous_prompt, source=source)
         self._PutStateIntoFlow(key, copy.deepcopy(entry), prompt, with_states=True)
         return True, ""
+
+    def ReplaceBranch(self, old_keys: Any, new_states: dict, rewritten_states: dict,
+                      source: str = "") -> tuple[bool, str]:
+        """Replace a branch of the running flow with another in a single step, and return whether it was applied
+        together with the reason when it was not. This is the only way a state ever leaves the flow.
+
+        NOTE: You will only need this during dynamic dialogue tree construction, during an ongoing conversation
+        session. Only use this feature if you genuinely need a complicated, dynamic conversation, rather than a
+        structured or planned one.
+
+        ``old_keys`` holds the keys of the states going out. ``new_states`` maps the key of every state coming in to
+        its entry and prompt as a pair, under keys the flow does not hold yet. ``rewritten_states`` maps the key of
+        every remaining state whose exits must change, usually because they led into the old branch, to its new entry
+        and prompt as a pair. ``source`` is the label the caller gives the record.
+
+        Any shape can be built this way, forks, merges, loops inside a branch, branches inside branches and branches
+        leading into other branches, as deep and as wide as needed, and swapped in and out for as long as the session
+        runs. A few rules hold at the moment of a swap, and none of them limits the shape a graph can take. No state
+        exits to itself, as everywhere in the package, so a loop passes through another state. Every exit leads to a
+        state that exists after the swap, so the whole new branch is passed together and a dangling exit is refused.
+        The current state is never touched, so a swap that would remove or rewrite it, or remove any state of a
+        branch the conversation is in, is refused and waits for a later call. The starting state always stays,
+        because a reopened session begins there. A branch goes out only whole, so a swap is refused while any state
+        that remains would still lead into it, and no part is ever left cut off.
+
+        Everything is checked before anything changes, the rules above, the shape of every entry, as
+        ``ApplyStateChange`` checks it, and that every analyzer named is registered, and a refused swap changes
+        nothing at all. An accepted swap writes the new states, then the rewritten ones, then removes the old ones, each
+        recorded first as a ``FlowChangeEvent`` through
+        ``illocutionary_lifecycles.memory.memory.Memory.UpsertFlowChangeEvent`` and only then applied to
+        ``ConversationStateInitBundle`` and ``ConversationStates`` together. A removal is recorded with ``None`` as its
+        entry and prompt and with the removed entry and prompt as the previous ones, so the record keeps every state
+        that ever existed and ``RecoverInit`` rebuilds the same flow when the session is reopened. The method has no
+        await, so no part of a turn runs in the middle of it. Called by
+        ``illocutionary_lifecycles.core.session_provider.SessionProvider.ReplaceBranch``.
+        """
+        if not self.FlowChangeAllowed:
+            return False, "flow changes are not allowed in this session, set FlowChangeAllowed to allow them"
+        if self.Record is None or not isinstance(self.ConversationStateInitBundle, dict) or self.ConversationStates is None:
+            return False, "the session has not started"
+        old = [str(k) for k in (old_keys or [])]
+        try:
+            new = {str(k): (v[0], v[1]) for k, v in (new_states or {}).items()}
+            rewritten = {str(k): (v[0], v[1]) for k, v in (rewritten_states or {}).items()}
+        except (TypeError, IndexError):
+            return False, "new_states and rewritten_states map a key to an (entry, prompt) pair"
+        current = str(self.conversation_state)
+        if current in old or current in rewritten:
+            return False, "the current conversation state is never changed"
+        if "0" in old:
+            return False, "the starting state '0' always stays, a reopened session begins there"
+        for k in old:
+            if k not in self.ConversationStates:
+                return False, f"there is no state {k!r} to remove"
+        for k in new:
+            if k in self.ConversationStates:
+                return False, f"the new state {k!r} is already in the flow"
+        for k in rewritten:
+            if k in old or k not in self.ConversationStates:
+                return False, f"the rewritten state {k!r} is not a remaining state of the flow"
+        after = (set(self.ConversationStates) - set(old)) | set(new)
+        writes = {**new, **rewritten}
+        names = []
+        for k, (entry, _prompt) in writes.items():
+            if not k.isdigit():
+                return False, f"a state key is a string of digits, not {k!r}"
+            if not isinstance(entry, dict) or not isinstance(entry.get("questions", []), list):
+                return False, f"the entry of {k!r} is a dict, and its 'questions' a list"
+            for criterion in entry.get("ConversationStateTransitionCriteria") or []:
+                target = criterion.get("TargetConversationState") if isinstance(criterion, dict) else None
+                if not isinstance(target, str) or target == k or target not in after:
+                    return False, f"the TargetConversationState {target!r} of {k!r} is not another state of the flow after the swap"
+                names.append(criterion.get("Analyzer"))
+            if entry.get("questions"):
+                names.append("QuestionCompleteCriteria")
+            names += [n for n in (entry.get("Analyzers") or []) if isinstance(n, str) and n.strip()]
+        for k in after - set(writes):
+            for criterion in self.ConversationStates[k].get("ConversationStateTransitionCriteria") or []:
+                target = criterion.get("TargetConversationState") if isinstance(criterion, dict) else None
+                if target in old:
+                    return False, f"the state {k!r} would still lead to {target!r}, rewrite it in the same swap"
+        from illocutionary_lifecycles.analyzers.AnalyzerBase import RequireAnalyzers
+        try:
+            RequireAnalyzers([n for n in names if n])
+        except LookupError as exc:
+            return False, str(exc)
+        prompts = self.PromptBlocks().get("IllocutionaryPrompt") or {}
+        for k, (entry, prompt) in writes.items():
+            self.Record.UpsertFlowChangeEvent(k, entry, prompt, self.ConversationStates.get(k), prompts.get(k),
+                                              source=source)
+            self._PutStateIntoFlow(k, copy.deepcopy(entry), prompt, with_states=True)
+        for k in old:
+            self.Record.UpsertFlowChangeEvent(k, None, None, self.ConversationStates.get(k), prompts.get(k),
+                                              source=source)
+            self._RemoveStateFromFlow(k, with_states=True)
+        return True, ""
+
+    def _RemoveStateFromFlow(self, key: str, with_states: bool) -> None:
+        """Remove ``key`` from the flow's ``ConversationStates`` and from its ``IllocutionaryPrompt``, and from
+        ``ConversationStates`` of this class too when ``with_states`` is true. Called only by ``ReplaceBranch`` and by
+        ``RecoverInit`` when it replays a removal, never from outside this class."""
+        bundle = self.ConversationStateInitBundle
+        bundle.get("ConversationStates", {}).pop(key, None)
+        (bundle.get("PromptBlocks", {}).get("IllocutionaryPrompt") or {}).pop(key, None)
+        if with_states:
+            self.ConversationStates.pop(key, None)
 
     def _PutStateIntoFlow(self, key: str, entry: Any, prompt: Any, with_states: bool) -> None:
         """Put ``entry`` under ``key`` in the flow's ``ConversationStates`` and ``prompt`` under ``key`` in its

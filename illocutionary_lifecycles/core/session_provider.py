@@ -458,6 +458,23 @@ class SessionProvider:
             return False, "the session has not started"
         return self.SystemState.ApplyStateChange(key, entry, prompt, source=source)
 
+    def ReplaceBranch(self, old_keys: Any, new_states: dict, rewritten_states: dict,
+                      source: str = "") -> tuple[bool, str]:
+        """Replace a branch of the running flow with another in a single step, and return whether it was applied
+        together with the reason when it was not, or false with "the session has not started" before ``start``. This
+        is the only way a state ever leaves the flow.
+
+        NOTE: You will only need this during dynamic dialogue tree construction, during an ongoing conversation
+        session. Only use this feature if you genuinely need a complicated, dynamic conversation, rather than a
+        structured or planned one.
+
+        The call is passed to ``SystemState.ReplaceBranch``, whose docstring describes the arguments, the rules that
+        hold at the moment of a swap and how the swap is recorded. A server calls this on the provider it receives in
+        a mount's ``OnSessionOpened``, between turns."""
+        if self.SystemState is None:
+            return False, "the session has not started"
+        return self.SystemState.ReplaceBranch(old_keys, new_states, rewritten_states, source=source)
+
     def SetQuestionAnswerHook(self, Enabled: bool) -> bool:
         """Set ``SystemState.QuestionAnswerHook`` to ``Enabled`` and return true, or return false before ``start``.
 
