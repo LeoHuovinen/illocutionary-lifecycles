@@ -79,6 +79,8 @@ class LocalLLMClient:
     ``transformers`` text-generation pipeline, loaded on first use through the property ``pipeline``."""
 
     config: LocalLLMConfig = field(default_factory=LocalLLMConfig)
+    # A local model never takes a schema, as ``complete_json`` below explains.
+    structured: bool | None = False
     _pipeline: Any = field(default=None, repr=False)
 
     @property
@@ -97,7 +99,7 @@ class LocalLLMClient:
             self._pipeline = pipeline("text-generation", model=model, tokenizer=tokenizer, **device)
         return self._pipeline
 
-    def _generate(self, prompt: str, temperature: float, max_tokens: int | None) -> str:
+    def _generate(self, prompt: str, temperature: float | None, max_tokens: int | None) -> str:
         """Return the model's text for ``prompt`` without the prompt itself, stripped of surrounding spaces, generating
         at most ``max_tokens`` tokens or ``config.max_new_tokens`` when that is ``None``, sampling when ``temperature``
         is above 0 and choosing the most likely tokens otherwise. A model with a chat template is given the prompt as one
@@ -108,7 +110,7 @@ class LocalLLMClient:
             "max_new_tokens": max_tokens if max_tokens is not None else self.config.max_new_tokens,
             "return_full_text": False,
         }
-        if temperature > 0:
+        if temperature is not None and temperature > 0:
             settings.update(do_sample=True, temperature=temperature)
         else:
             settings.update(do_sample=False)
@@ -129,7 +131,7 @@ class LocalLLMClient:
         self,
         prompt: str,
         *,
-        temperature: float = 0.3,
+        temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
         """Return the model's reply text to ``prompt`` with quote marks removed by ``_strip_quotes`` from
@@ -142,10 +144,16 @@ class LocalLLMClient:
         self,
         prompt: str,
         *,
-        temperature: float = 0.3,
+        temperature: float | None = None,
+        schema: dict[str, Any] | None = None,
+        schema_name: str = "reply",
     ) -> dict[str, Any]:
         """Return the first JSON object in the model's reply to ``prompt``, found by ``extract_json_object``, or an empty
         dict when the reply holds none, generated in a worker thread with ``temperature``, 0.3 by default, as the module
-        docstring above explains."""
+        docstring above explains.
+
+        ``schema`` and ``schema_name`` are accepted so a caller can pass the same arguments to every client, and are
+        ignored, because the ``transformers`` pipeline has no way to hold generation to a schema. ``structured`` is
+        therefore always False here, and the caller must check the reply in code."""
         text = await asyncio.to_thread(self._generate, prompt, temperature, None)
         return extract_json_object(text)

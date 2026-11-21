@@ -30,6 +30,35 @@ The analyzers' client is chosen once per process. ``analyzer_llm`` builds it fro
 ``configure_clients`` sets it in code, which ``SystemState.BuildLLMConnection`` does when a session is given an
 ``llm_config``. ``incremental_phrase_llm`` returns the incremental analyzer's client, the one ``configure_clients``
 set for it, or else the analyzers' client.
+
+Structured JSON. ``complete_json`` takes an optional ``schema``, a JSON Schema the reply must follow. Pass one whenever
+the reply has a known shape, because a strict schema is enforced while the model writes, so a reply in the wrong shape
+cannot come back, and the caller's check and retry are then only a safety net. Without ``schema`` the call asks only
+for some JSON object, and every caller that passes none, such as the question checker and the pragmatic criterion,
+behaves as before.
+
+A schema is sent as ``response_format`` set to ``{"type": "json_schema", "json_schema": {"name": ..., "strict": true,
+"schema": ...}}``, the form of the chat completions protocol both clients here speak. It is the closest thing to a
+common standard, but not universal, and a vendor with its own protocol takes the schema in a field of its own, so a
+client for such a vendor needs its own branch. Every vendor supports only part of JSON Schema. Strict mode needs
+``additionalProperties`` false on every object and every property listed in ``required``, and limits on numbers,
+string lengths and array lengths are not enforced everywhere, and some vendors refuse the whole call for an array
+length above 1, so a portable schema leaves counts and non-empty strings out and the caller checks them in code.
+
+No standard call tells in advance whether a model takes a strict schema, a plain JSON object or a temperature, so each
+client learns it from the first call that sends one and remembers the answer. ``structured`` is None while unknown,
+True once a schema was accepted and False once it was refused, after which the call is sent again without the schema
+and every later call goes without it. A vendor that refuses the plain JSON-object format sets
+``json_object_refused``, and from then on the call goes without a format and the object is taken from the reply text.
+A model that refuses a temperature sets ``temperature_refused``, and the call is sent again without it and every
+later call leaves it out. A refusal is recognised by a 400 whose message names the refused parameter, and any other
+400 is raised. A server that knows the answers sets the fields itself, and a server that wants them before the first
+conversation sends one small probe at start-up. A vendor that accepts a field and ignores it cannot be told apart this
+way, which is another reason the caller keeps its check.
+
+Temperature is optional in every client. With no temperature given, none is sent and the model uses its own default.
+The incremental analyzer passes 0.0 for its one-word picks, so a model that supports temperature picks as steadily as
+it can, and a model that refuses it gets the same call without it after the first refusal.
 """
 from __future__ import annotations
 
@@ -38,7 +67,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai import AsyncAzureOpenAI, AsyncOpenAI, BadRequestError
 
 
 # Double quotes and backticks are removed from reply text. An apostrophe is removed only when
@@ -54,6 +83,72 @@ def _strip_quotes(text: str) -> str:
     ``complete`` of both clients in this module and of
     ``illocutionary_lifecycles.core.clients.LocalLLMClient.LocalLLMClient``, so no reply reaches a user with quotes."""
     return _APOSTROPHE_RE.sub("", _QUOTE_RE.sub("", text))
+
+
+def _refuses_schema(exc: BadRequestError) -> bool:
+    """Return whether a 400 from the vendor is about the structured response format and not about something else, as
+    the module docstring above explains. Called by ``_json_call`` in this module."""
+    text = str(exc).lower()
+    return "response_format" in text or "json_schema" in text or "structured output" in text
+
+
+async def _send(owner: Any, kwargs: dict[str, Any]) -> Any:
+    """Send one chat completion with ``kwargs`` through ``owner.client`` and return the response. A temperature the
+    model refused once is left out of every later call of ``owner``, and a refusal of it, a 400 whose message names
+    temperature, sets ``owner.temperature_refused`` and sends the same call again without it, so a caller that passes
+    a temperature still gets a reply from a model that takes none. Called by ``complete`` of both clients and by
+    ``_json_call`` in this module."""
+    if getattr(owner, "temperature_refused", False):
+        kwargs.pop("temperature", None)
+    try:
+        return await owner.client.chat.completions.create(**kwargs)
+    except BadRequestError as exc:
+        if "temperature" not in kwargs or "temperature" not in str(exc).lower():
+            raise
+        owner.temperature_refused = True
+        kwargs.pop("temperature")
+        return await owner.client.chat.completions.create(**kwargs)
+
+
+async def _json_call(owner: Any, model: str, prompt: str, temperature: float | None, schema: dict[str, Any] | None,
+                     schema_name: str) -> dict[str, Any]:
+    """Send ``prompt`` through ``owner.client`` to ``model`` and return the reply parsed as JSON, or an empty dict when
+    the model returns no content, with a strict ``schema`` when one is given and ``owner.structured`` is not False, and
+    with the JSON-object format otherwise. A vendor that refuses the schema sets ``owner.structured`` to False and the
+    call is sent again without it, and one that accepts it sets ``owner.structured`` to True, as the module docstring
+    above explains. Called by ``complete_json`` of both clients in this module."""
+    fmt: dict[str, Any] | None = {"type": "json_object"}
+    use_schema = schema is not None and owner.structured is not False
+    if use_schema:
+        fmt = {"type": "json_schema", "json_schema": {"name": schema_name, "strict": True, "schema": schema}}
+    elif getattr(owner, "json_object_refused", False):
+        # The vendor accepts no JSON-object format, so the call goes without a format and the object is found in the
+        # reply text.
+        fmt = None
+    try:
+        response = await _send(owner, dict(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            **({"temperature": temperature} if temperature is not None else {}),
+            **({"response_format": fmt} if fmt is not None else {}),
+        ))
+    except BadRequestError as exc:
+        if fmt is None or not _refuses_schema(exc):
+            raise
+        if use_schema:
+            owner.structured = False
+        else:
+            owner.json_object_refused = True
+        return await _json_call(owner, model, prompt, temperature, None, schema_name)
+    if use_schema:
+        owner.structured = True
+    content = response.choices[0].message.content
+    if content is None:
+        return {}
+    if fmt is None:
+        start, end = content.find("{"), content.rfind("}")
+        return json.loads(content[start:end + 1]) if start != -1 and end > start else {}
+    return json.loads(content)  # type: ignore[no-any-return]
 
 
 @dataclass
@@ -76,6 +171,9 @@ class LLMClient:
 
     config: LLMConfig
     _client: AsyncAzureOpenAI | None = None
+    # Whether the deployment takes a strict JSON schema, None until a call with a schema tells, as the module
+    # docstring above explains. A server may set it.
+    structured: bool | None = None
 
     @property
     def client(self) -> AsyncAzureOpenAI:
@@ -93,7 +191,7 @@ class LLMClient:
         self,
         prompt: str,
         *,
-        temperature: float = 0.3,
+        temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
         """Send ``prompt`` to the deployment as one user message and return the reply text, stripped of surrounding
@@ -105,12 +203,12 @@ class LLMClient:
         kwargs: dict[str, Any] = {
             "model": self.config.deployment,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": temperature,
+            **({"temperature": temperature} if temperature is not None else {}),
         }
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
 
-        response = await self.client.chat.completions.create(**kwargs)
+        response = await _send(self, kwargs)
         content = response.choices[0].message.content
         if content is None:
             return ""
@@ -120,22 +218,22 @@ class LLMClient:
         self,
         prompt: str,
         *,
-        temperature: float = 0.3,
+        temperature: float | None = None,
+        schema: dict[str, Any] | None = None,
+        schema_name: str = "reply",
     ) -> dict[str, Any]:
-        """Send ``prompt`` to the deployment as one user message with the JSON-object response format and return the
-        parsed object, or an empty dict when the model returns no content. ``temperature`` is 0.3 by default. A reply
-        that is not valid JSON raises ``json.JSONDecodeError``, which every analyzer catches and treats as no answer.
-        Called by the question checker and the pragmatic transition criterion through ``analyzer_llm`` in this module."""
-        response = await self.client.chat.completions.create(
-            model=self.config.deployment,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=temperature,
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content
-        if content is None:
-            return {}
-        return json.loads(content)  # type: ignore[no-any-return]
+        """Send ``prompt`` to the deployment as one user message and return the reply parsed as JSON, or an empty dict
+        when the model returns no content. ``temperature`` is optional and sent only when given. A reply that is not valid JSON raises
+        ``json.JSONDecodeError``, which every analyzer catches and treats as no answer. Called by the question checker
+        and the pragmatic transition criterion through ``analyzer_llm`` in this module, without a schema.
+
+        Pass ``schema`` whenever the reply has a known shape. With a JSON Schema in ``schema`` the deployment is held to
+        it while it writes, so the reply cannot come back in the wrong shape, and ``schema_name`` names it for the
+        vendor. Without one, only some JSON object is asked for. When the deployment refuses the schema the call is
+        sent again without it and ``structured`` remembers that, so passing a schema never makes a call fail. Which
+        deployments take one, how to know in advance and which schema keywords are enforced are explained in the module
+        docstring above. Keep checking the reply in code even with a schema."""
+        return await _json_call(self, self.config.deployment, prompt, temperature, schema, schema_name)
 
 
 @dataclass
@@ -157,6 +255,9 @@ class OpenAIClient:
 
     config: OpenAIConfig
     _client: AsyncOpenAI | None = None
+    # Whether the service takes a strict JSON schema, None until a call with a schema tells, as the module docstring
+    # above explains. A server may set it.
+    structured: bool | None = None
 
     @property
     def client(self) -> AsyncOpenAI:
@@ -173,7 +274,7 @@ class OpenAIClient:
         self,
         prompt: str,
         *,
-        temperature: float = 0.3,
+        temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
         """Send ``prompt`` to the model as one user message and return the reply text, stripped of surrounding spaces
@@ -182,12 +283,12 @@ class OpenAIClient:
         kwargs: dict[str, Any] = {
             "model": self.config.model,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": temperature,
+            **({"temperature": temperature} if temperature is not None else {}),
         }
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
 
-        response = await self.client.chat.completions.create(**kwargs)
+        response = await _send(self, kwargs)
         content = response.choices[0].message.content
         if content is None:
             return ""
@@ -197,20 +298,17 @@ class OpenAIClient:
         self,
         prompt: str,
         *,
-        temperature: float = 0.3,
+        temperature: float | None = None,
+        schema: dict[str, Any] | None = None,
+        schema_name: str = "reply",
     ) -> dict[str, Any]:
-        """Send ``prompt`` to the model with the JSON-object response format and return the parsed object, or an empty
-        dict when the model returns no content, in the same way as ``LLMClient.complete_json`` in this module."""
-        response = await self.client.chat.completions.create(
-            model=self.config.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=temperature,
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content
-        if content is None:
-            return {}
-        return json.loads(content)  # type: ignore[no-any-return]
+        """Send ``prompt`` to the model and return the reply parsed as JSON, or an empty dict when the model returns no
+        content, in the same way as ``LLMClient.complete_json`` in this module.
+
+        Pass ``schema`` whenever the reply has a known shape, as ``LLMClient.complete_json`` explains. Behind a
+        compatible address the support differs most between vendors, and a vendor that refuses the schema is
+        remembered in ``structured`` and called without it, as the module docstring above explains."""
+        return await _json_call(self, self.config.model, prompt, temperature, schema, schema_name)
 
 
 def llm_client_from_env() -> Any:
