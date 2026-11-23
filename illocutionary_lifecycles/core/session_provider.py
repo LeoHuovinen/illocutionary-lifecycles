@@ -19,7 +19,9 @@ and ``SetQuestionAnswerHook`` switch two settings. ``ConversationHistoryWindow``
 the recorded utterances. ``IncrementalPhraseTick`` hands over the speech so far while the user is still speaking,
 schedules the incremental settle and never waits for it, so a reply is never delayed by it. ``ApplyPromptChange``
 replaces one authored prompt block while the conversation runs. ``SetNonconversationalContentSocket`` places one text
-that neither the user nor the assistant said, for the composer and the analyzers to read. ``ApplyStateChange``, a later
+that neither the user nor the assistant said, for the composer and the analyzers to read.
+``SetNonconversationalSocketReader`` hands over the server's function for several named sockets,
+each switched on per conversation state in the flow, as its docstring explains. ``ApplyStateChange``, a later
 addition that does nothing unless the server set ``FlowChangeAllowed``, writes one conversation state of the running
 flow.
 
@@ -441,6 +443,47 @@ class SessionProvider:
         if self.SystemState is None:
             return False
         return self.SystemState.SetNonconversationalContentSocket(Content)
+
+    def SetNonconversationalSocketReader(self, Reader: Any) -> bool:
+        """Hand over ``Reader``, the server's function for its nonconversational sockets, and return whether it was
+        applied, which is false before ``start``.
+
+        NOTE. This is needed only when a session has several sources of text that neither speaker said, such as
+        video captions, a VR scene and sound events, and each conversation state should show only some of them. For a
+        single source, ``SetNonconversationalContentSocket`` is enough.
+
+        Each socket is a named instance, and its name is the key by which anything that reacts to one source alone,
+        such as a backchannel for that socket, is attached to it. Every nuance below is deliberate, and each is easy
+        to get wrong.
+
+        The server keeps every text. IL never stores a socket's text, neither in the pragmatic state nor in
+        ``SystemState``. ``Reader`` is called with the list of socket names the current state shows, in the flow's
+        order, every time a reply is composed, and returns a dict from those names to their current texts. It is a
+        plain function, not async, and it must answer quickly, because the reply waits for it. A name the server does
+        not hold is left out of the dict and causes no error, and a name listed twice shows once.
+
+        Which sockets a state shows is written in the flow, as the state's list ``nonconversational_socket_instances``.
+        That list is copied at every state entry to the pragmatic field ``pNonconversationalSocketInstancesState``,
+        which holds names only and is the mutable side. A state without the list, or with an empty list, shows no
+        socket at all, unlike the text placed by ``SetNonconversationalContentSocket``, which stays through every state.
+
+        The socket names are fixed when the session starts. ``SystemState.NonconversationalSocketOptions`` holds every
+        name the flow lists at that moment, as a frozenset that never changes, the immutable side.
+        ``ApplyStateChange`` and ``ReplaceBranch`` refuse a state whose list names any other socket, so no socket is
+        ever added while the session runs. A server must also keep its own set of sockets fixed after
+        ``OnSessionOpened``, and change only their texts.
+
+        The texts of the sockets a state shows fill the one blank ``{pNonconversationalContentSocketState}``, one text
+        per line in the flow's order, with no names or labels, so the flow's authored text must say what they are.
+        While a reader is set it fills that blank and replaces any text placed by ``SetNonconversationalContentSocket``.
+        The analyzers see the names in ``pNonconversationalSocketInstancesState`` but never the texts, and the texts
+        are not saved in the record, so only the server knows what a prompt showed.
+
+        A server calls this once, on the provider it receives in a mount's ``OnSessionOpened``."""
+        if self.SystemState is None:
+            return False
+        self.SystemState.NonconversationalSocketReader = Reader
+        return True
 
     def ApplyStateChange(self, key: str, entry: dict, prompt: str, source: str = "") -> tuple[bool, str]:
         """Write the conversation state ``key`` of the running flow with ``entry`` and ``prompt``, and return whether

@@ -156,8 +156,12 @@ async def ComposeCurrentPrompt(self: Any) -> str:
                 views = views[1:]
             return views
     BlocksFace = functools.partial(StaticPromptLibrary, self.PromptBlocks())
+    # The server's sockets, read at every compose for the names the current state shows, and never stored by IL, as
+    # ``SessionProvider.SetNonconversationalSocketReader`` explains.
+    Reader = getattr(self, "NonconversationalSocketReader", None)
+    Sockets = Reader(list(getattr(PragmaticState, "pNonconversationalSocketInstancesState", []) or [])) if Reader else None
     prompt = await PragmaticState.Composer(
-        window=WindowFace, memories=UserMemoryFace, blocks=BlocksFace,
+        window=WindowFace, memories=UserMemoryFace, blocks=BlocksFace, sockets=Sockets,
     )
     return prompt if isinstance(prompt, str) else ""
 

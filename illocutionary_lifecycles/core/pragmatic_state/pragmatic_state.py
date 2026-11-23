@@ -126,7 +126,9 @@ class PragmaticState:
     ``pCategoricalAnswerState`` holds the options chosen in the current state, set by the refresher.
     ``pIgnoreMemoriesState`` is set while remembered answers are kept out of the prompt, by
     ``SystemState.set_ignore_memories``. ``pNonconversationalContentSocketState`` holds one text a server placed that
-    neither speaker said, set by ``SystemState.SetNonconversationalContentSocket``. A field named p, then an
+    neither speaker said, set by ``SystemState.SetNonconversationalContentSocket``.
+    ``pNonconversationalSocketInstancesState`` holds the names, never the texts, of the server's sockets the current
+    state shows, set at state entry, as ``SessionProvider.SetNonconversationalSocketReader`` explains. A field named p, then an
     analyzer's registered name, then State holds what that incremental analyzer last returned, by instance identifier,
     set by the refresher.
     """
@@ -140,7 +142,7 @@ class PragmaticState:
     Refresher: Any = field(default=None, repr=False)
     SyncCycle: Any = field(default=None, repr=False)
 
-    async def Composer(self, *, window: Any = None, memories: Any = None, blocks: Any = None) -> str:
+    async def Composer(self, *, window: Any = None, memories: Any = None, blocks: Any = None, sockets: Any = None) -> str:
         """Return the prompt for the next reply, built from this object's fields and the three inputs, with its parts
         joined by a line of three hyphens and empty parts left out.
 
@@ -160,6 +162,9 @@ class PragmaticState:
         ``window`` holds the utterances to show as ``TurnView`` objects, or a callable that returns them, and ``None``
         shows none. ``memories`` holds the remembered answers. ``blocks`` holds a callable that takes the fields as a
         dict and returns the authored texts, as ``StaticPromptLibrary`` does, or a plain list of block texts.
+        ``sockets`` holds the texts of the server's sockets the current state shows, by name, read from the server for
+        this prompt alone, and ``None`` when no reader is set. When it is given, it fills the blank
+        ``{pNonconversationalContentSocketState}`` one text per line, in place of any text placed on that field.
         """
         PragmaticStates: dict[str, Any] = {}
         for _name, _value in vars(self).items():
@@ -203,6 +208,8 @@ class PragmaticState:
             _QuestionPrompt = _ConditionResolvedText(question_prompt, Tokens)
             if _QuestionPrompt:
                 fill["pConversationStateRemainingQuestions"] += "\n" + str(_QuestionPrompt)
+        if sockets is not None:
+            fill["pNonconversationalContentSocketState"] = _readable(sockets)
         filled = [str(_ConditionResolvedText(block, Tokens)).format_map(fill)
                   for block in matched]
 

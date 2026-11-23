@@ -43,6 +43,9 @@ and ``PragmaticState.Composer`` prints its own heading and note when the keys ar
 ``SessionProvider.SetNonconversationalContentSocket`` places one text that neither the user nor the assistant said,
 such as a summary of the closed captions of a video they are watching together, on the pragmatic field
 ``pNonconversationalContentSocketState``, and an empty text removes it.
+``SessionProvider.SetNonconversationalSocketReader`` serves several such texts as named sockets that the server keeps,
+each switched on per conversation state in the flow and fixed when the session starts. The socket's name is the key by
+which anything that reacts to one source alone, such as a backchannel for that socket, is attached to it.
 ``SessionProvider.ApplyStateChange`` writes one conversation state of the running flow, a later addition that does
 nothing unless the server sets ``FlowChangeAllowed``. It refuses the current state, records the change as a
 ``FlowChangeEvent`` before applying it, as ``SystemState.ApplyStateChange`` describes. Only use it for a conversation that must be built

@@ -17,8 +17,9 @@ The flow is the dict a server hands to a mount, with ``PromptBlocks`` and
 keys of a state are read and checked, so the error a malformed flow raises comes from here, at session start or when
 the state is entered. A state is an entry of ``ConversationStates`` keyed by its index as a string, and may hold
 ``name``, ``questions``, ``ConversationStateTransitionCriteria``, ``Analyzers``, ``permissive_after_turns``,
-``ignore_memories``, ``global_history_window``, ``global_history_turns``, ``session_first_reply_flag`` and
-``incremental_phrase_instances``. A state without ``ConversationStateTransitionCriteria`` is an ending that the
+``ignore_memories``, ``global_history_window``, ``global_history_turns``, ``session_first_reply_flag``,
+``incremental_phrase_instances`` and ``nonconversational_socket_instances``, which names the server's
+sockets the state shows, as ``SessionProvider.SetNonconversationalSocketReader`` explains. A state without ``ConversationStateTransitionCriteria`` is an ending that the
 conversation never leaves. The flow stays as it started unless the server sets ``FlowChangeAllowed``, a later addition
 after which ``ApplyStateChange`` may write states other than the current one while the conversation runs, as its
 docstring explains.
@@ -97,6 +98,14 @@ class SystemState:
 
     global_history_window: bool = False
     global_history_turns: int = 10
+
+    # The server's function that returns its sockets' texts by name, called each time a reply is composed. A function
+    # and never a text, because IL stores no socket text, as ``SessionProvider.SetNonconversationalSocketReader`` says.
+    NonconversationalSocketReader: Any = None
+    # Every socket name the flow lists when the session starts, a frozenset set once at the first state entry and never
+    # changed, the immutable side against which flow changes are checked, and ``None`` before that entry. The mutable side, the
+    # names the current state shows, is the pragmatic field ``pNonconversationalSocketInstancesState``.
+    NonconversationalSocketOptions: Any = None
 
     def InitializeMemoryClasses(self) -> None:
         """Create the session's record, ``Record``, and its writer, ``memory_writer``, and return ``None``.
@@ -322,6 +331,8 @@ class SystemState:
             return False, f"a state key is a string of digits, not {key!r}"
         if not isinstance(entry, dict) or not isinstance(entry.get("questions", []), list):
             return False, "an entry is a dict, and its 'questions' a list"
+        if self._SocketListRefusal(entry):
+            return False, self._SocketListRefusal(entry)
         names = []
         for criterion in entry.get("ConversationStateTransitionCriteria") or []:
             target = criterion.get("TargetConversationState") if isinstance(criterion, dict) else None
@@ -342,6 +353,22 @@ class SystemState:
         self.Record.UpsertFlowChangeEvent(key, entry, prompt, previous_entry, previous_prompt, source=source)
         self._PutStateIntoFlow(key, copy.deepcopy(entry), prompt, with_states=True)
         return True, ""
+
+    def _SocketListRefusal(self, entry: dict) -> str:
+        """Return why ``entry``'s list ``nonconversational_socket_instances`` may not go into the running flow, or an
+        empty string when it may or when the entry has no list. The list must hold socket names only, and every name
+        must be in ``NonconversationalSocketOptions``, the names fixed when the session started, so a flow change never
+        adds a socket. Checking here, before anything changes, matters, because a malformed list that got in would
+        only raise at that state's entry, in the middle of a turn, and leave the conversation stuck there. Called by
+        ``ApplyStateChange`` and ``ReplaceBranch`` in this class."""
+        names = entry.get("nonconversational_socket_instances")
+        if names is None:
+            return ""
+        if not (isinstance(names, list) and all(isinstance(n, str) and n.strip() for n in names)):
+            return "'nonconversational_socket_instances' must be a list of socket names"
+        allowed = self.NonconversationalSocketOptions or frozenset()
+        unknown = [n for n in names if n not in allowed]
+        return f"the sockets {unknown} were not in the flow at session start" if unknown else ""
 
     def ReplaceBranch(self, old_keys: Any, new_states: dict, rewritten_states: dict,
                       source: str = "") -> tuple[bool, str]:
@@ -410,6 +437,8 @@ class SystemState:
                 return False, f"a state key is a string of digits, not {k!r}"
             if not isinstance(entry, dict) or not isinstance(entry.get("questions", []), list):
                 return False, f"the entry of {k!r} is a dict, and its 'questions' a list"
+            if self._SocketListRefusal(entry):
+                return False, f"the entry of {k!r}: " + self._SocketListRefusal(entry)
             for criterion in entry.get("ConversationStateTransitionCriteria") or []:
                 target = criterion.get("TargetConversationState") if isinstance(criterion, dict) else None
                 if not isinstance(target, str) or target == k or target not in after:
@@ -586,6 +615,9 @@ class SystemState:
         the question checker. ``pActiveAnalyzersState`` is set to those names, the criteria named in the list and the
         names in the state's ``Analyzers`` list. The state's prompt is checked by ``_CheckStatePrompt``. The list
         ``incremental_phrase_instances``, when present, is checked and copied to ``pIncrementalPhraseInstancesState``.
+        The list ``nonconversational_socket_instances`` is checked and copied to
+        ``pNonconversationalSocketInstancesState``, as an empty list when the state has none, and at the first entry
+        every name the flow lists is fixed in ``NonconversationalSocketOptions``.
 
         A malformed entry raises ``ValueError`` here, when the state is entered, and not later as a conversation that
         silently stops moving. The texts begin "ConversationStateTransitionCriteria must be a non-empty list of
@@ -736,6 +768,13 @@ class SystemState:
             ps.pIncrementalPhraseInstancesState = [dict(_Entry) for _Entry in _Instances]
         elif hasattr(ps, "pIncrementalPhraseInstancesState"):
             del ps.pIncrementalPhraseInstancesState
+        _SocketNames = StateEntry.get("nonconversational_socket_instances") if isinstance(StateEntry, dict) else None
+        if _SocketNames is not None and not (isinstance(_SocketNames, list) and all(isinstance(n, str) and n.strip() for n in _SocketNames)):
+            raise ValueError("a state's 'nonconversational_socket_instances' must be a list of socket names")
+        ps.pNonconversationalSocketInstancesState = list(_SocketNames or [])
+        if self.NonconversationalSocketOptions is None:   # the first entry, at session start
+            self.NonconversationalSocketOptions = frozenset(n for e in self.ConversationStates.values() if isinstance(e, dict)
+                                                            for n in (e.get("nonconversational_socket_instances") or []))
 
     # The blanks a prompt block may hold: every pragmatic field, and the composer's own two.
     _KnownBlanks = frozenset({
