@@ -13,7 +13,7 @@ adapter in the same folder passes every call to it, and the provider reaches ``S
 every turn and writes every event to the record in the folder ``memory``. A process that serves several conversations
 holds one provider for each.
 
-The calls an adapter makes fall into eight kinds. ``ResponseProcessing`` gives the session one finished user utterance
+The calls an adapter makes fall into ten kinds. ``ResponseProcessing`` gives the session one finished user utterance
 and returns the reply. ``TTSUtteranceSave`` saves an assistant reply once it has been delivered. ``set_ignore_memories``
 and ``SetQuestionAnswerHook`` switch two settings. ``ConversationHistoryWindow`` and ``ConversationHistoryTurns`` read
 the recorded utterances. ``IncrementalPhraseTick`` hands over the speech so far while the user is still speaking,
@@ -21,9 +21,10 @@ schedules the incremental settle and never waits for it, so a reply is never del
 replaces one authored prompt block while the conversation runs. ``SetNonconversationalContentSocket`` places one text
 that neither the user nor the assistant said, for the composer and the analyzers to read.
 ``SetNonconversationalSocketReader`` hands over the server's function for several named sockets,
-each switched on per conversation state in the flow, as its docstring explains. ``ApplyStateChange``, a later
-addition that does nothing unless the server set ``FlowChangeAllowed``, writes one conversation state of the running
-flow.
+each switched on per conversation state in the flow, as its docstring explains. ``Backchannel`` returns one short
+reaction composed from the current state's prompt and an instruction from the server, which is not saved as an
+utterance and is not a turn. ``ApplyStateChange``, a later addition that does nothing unless the server set
+``FlowChangeAllowed``, writes one conversation state of the running flow.
 
 When a user utterance moves the conversation to another state, the provider has the new state process the same
 utterance through ``SystemState.EstablishConversationStateAndFirstReply``, passing the utterance's refresh index as
@@ -444,6 +445,38 @@ class SessionProvider:
             return False
         return self.SystemState.SetNonconversationalContentSocket(Content)
 
+    async def Backchannel(self, Instruction: str) -> str:
+        """Return one short reaction, in the assistant's voice, to what the server placed as nonconversational
+        content, written in the current conversation state, or an empty string before ``start`` or when
+        ``Instruction`` is empty.
+
+        The prompt is the one ``SystemState.ComposeCurrentPrompt`` composes for the current state at the moment of the
+        call, with the frame prompt, the state's own instruction, its open questions, the remembered answers, the
+        recent utterances and the nonconversational content, followed by ``Instruction``, the server's own words for
+        the kind of reaction it wants, such as one short thought that does not answer. Because the state's own
+        instruction and questions are in the prompt, the reaction may drift toward asking them, and ``Instruction``
+        has to say plainly that it should not. Nothing limits the length but ``Instruction``. The text goes to the
+        model through ``PostComposerLLMCallHelper``, the same call that writes every reply, and an error of the model
+        call reaches the caller.
+
+        The text is not saved as an utterance and no analyzer runs on it, so it counts no turn, moves no state and
+        does not appear in the history window of the next reply. Nothing else is saved either, so the record does not
+        show that a backchannel was given or what it said. The flow is not changed by it.
+
+        A server decides when to ask, such as when the content changed, when the user touched or pointed at
+        something, or after a silence. A line it adds to the content for the occasion, such as what the user just
+        focused on, is best removed once the reaction is no longer shown, so the content does not say more than what
+        both speakers can still perceive. A server should not place the reaction's own text back into the content,
+        because a reaction that reads its own earlier output tends to repeat itself and drift. Timing, frequency and
+        overlap with spoken replies stay with the server."""
+        Instruction = str(Instruction or "").strip()
+        if self.SystemState is None or not Instruction:
+            return ""
+        from illocutionary_lifecycles.core.clients.PostComposerLLMCallHelper import PostComposerLLMCallHelper
+        prompt = await self.SystemState.ComposeCurrentPrompt()
+        return await PostComposerLLMCallHelper(getattr(self.SystemState, "llm_client", None),
+                                               prompt + "\n\n---\n" + Instruction)
+
     def SetNonconversationalSocketReader(self, Reader: Any) -> bool:
         """Hand over ``Reader``, the server's function for its nonconversational sockets, and return whether it was
         applied, which is false before ``start``.
@@ -459,13 +492,15 @@ class SessionProvider:
         The server keeps every text. IL never stores a socket's text, neither in the pragmatic state nor in
         ``SystemState``. ``Reader`` is called with the list of socket names the current state shows, in the flow's
         order, every time a reply is composed, and returns a dict from those names to their current texts. It is a
-        plain function, not async, and it must answer quickly, because the reply waits for it. A name the server does
-        not hold is left out of the dict and causes no error, and a name listed twice shows once.
+        plain function, not async, and it must answer quickly, because the reply waits for it, and an error it raises
+        reaches the reply. A name the server does not hold is left out of the dict and causes no error. IL does not
+        remove a name listed twice, and a dict holds it once.
 
         Which sockets a state shows is written in the flow, as the state's list ``nonconversational_socket_instances``.
         That list is copied at every state entry to the pragmatic field ``pNonconversationalSocketInstancesState``,
         which holds names only and is the mutable side. A state without the list, or with an empty list, shows no
-        socket at all, unlike the text placed by ``SetNonconversationalContentSocket``, which stays through every state.
+        socket at all, unlike the text placed by ``SetNonconversationalContentSocket``, which stays through every state
+        while no reader is set.
 
         The socket names are fixed when the session starts. ``SystemState.NonconversationalSocketOptions`` holds every
         name the flow lists at that moment, as a frozenset that never changes, the immutable side.
@@ -474,8 +509,9 @@ class SessionProvider:
         ``OnSessionOpened``, and change only their texts.
 
         The texts of the sockets a state shows fill the one blank ``{pNonconversationalContentSocketState}``, one text
-        per line in the flow's order, with no names or labels, so the flow's authored text must say what they are.
-        While a reader is set it fills that blank and replaces any text placed by ``SetNonconversationalContentSocket``.
+        per line in the order of the dict ``Reader`` returns, with no names or labels, so the flow's authored text must
+        say what they are. While a reader is set it fills that blank and replaces any text placed by
+        ``SetNonconversationalContentSocket``, also in a state that shows no socket, where the blank is then empty.
         The analyzers see the names in ``pNonconversationalSocketInstancesState`` but never the texts, and the texts
         are not saved in the record, so only the server knows what a prompt showed.
 

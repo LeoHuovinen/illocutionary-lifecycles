@@ -46,6 +46,9 @@ such as a summary of the closed captions of a video they are watching together, 
 ``SessionProvider.SetNonconversationalSocketReader`` serves several such texts as named sockets that the server keeps,
 each switched on per conversation state in the flow and fixed when the session starts. The socket's name is the key by
 which anything that reacts to one source alone, such as a backchannel for that socket, is attached to it.
+``SessionProvider.Backchannel`` returns one short reaction to the nonconversational content, composed from the
+current conversation state's prompt and the server's instruction. It is not saved as an utterance and no analyzer runs
+on it, so it is never a turn and never moves the conversation.
 ``SessionProvider.ApplyStateChange`` writes one conversation state of the running flow, a later addition that does
 nothing unless the server sets ``FlowChangeAllowed``. It refuses the current state, records the change as a
 ``FlowChangeEvent`` before applying it, as ``SystemState.ApplyStateChange`` describes. Only use it for a conversation that must be built
