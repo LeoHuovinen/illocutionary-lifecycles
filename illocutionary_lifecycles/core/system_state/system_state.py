@@ -333,6 +333,9 @@ class SystemState:
             return False, "an entry is a dict, and its 'questions' a list"
         if self._SocketListRefusal(entry):
             return False, self._SocketListRefusal(entry)
+        refusal = self._TurnCountRefusal(entry)
+        if refusal:
+            return False, refusal
         names = []
         for criterion in entry.get("ConversationStateTransitionCriteria") or []:
             target = criterion.get("TargetConversationState") if isinstance(criterion, dict) else None
@@ -369,6 +372,48 @@ class SystemState:
         allowed = self.NonconversationalSocketOptions or frozenset()
         unknown = [n for n in names if n not in allowed]
         return f"the sockets {unknown} were not in the flow at session start" if unknown else ""
+
+    # The values of ``session_first_reply_flag`` that make an entered state wait for the user's next turn.
+    _WaitingFirstReplyFlags = frozenset({"skip_TransitionCriteria", "ignore_EntryUtterance"})
+
+    def _TurnCountRefusal(self, entry: Any) -> str:
+        """Return why ``entry`` may not have a turn count criterion below 2, or an empty string when it may.
+
+        The reason is how a move between states works. When a user utterance moves the conversation, the reply to that
+        utterance is written by the state just entered, not by the state left, so the user hears the new state at
+        once. To write it, ``EstablishConversationStateAndFirstReply`` has the new state process that same utterance
+        as one of its own turns, and the refresher counts it, so the new state's turn count is already 1 before the
+        user has said anything to it.
+
+        A ``TurnCountConversationStateTransitionCriteria`` whose ``Prompt`` is below 2 is therefore met on that very
+        utterance. The new state is left again within the same turn, before it has replied, and the user never hears
+        it. When two such states lead to each other, the one utterance is passed back and forth until
+        ``SessionProvider.ResponseProcessing`` stops at its cap on moves per turn, and the reply is empty, with no
+        error.
+
+        The two values of ``_WaitingFirstReplyFlags`` remove that cause. "skip_TransitionCriteria" still counts the
+        utterance but runs no criterion for the first reply, and "ignore_EntryUtterance" does not process the
+        utterance at all, so in both the new state replies first and is left only on a later turn of the user. A
+        number below 2 is allowed with either of them and refused without. A missing or non-integer ``Prompt`` is read
+        as 2 by the criterion and is allowed. Called by ``load_conversation_states_from_init``, ``ApplyStateChange``
+        and ``ReplaceBranch`` in this class, so a flow is refused when the session starts or when a state is written,
+        never in the middle of a turn."""
+        if not isinstance(entry, dict):
+            return ""
+        if entry.get("session_first_reply_flag") in self._WaitingFirstReplyFlags:
+            return ""
+        for criterion in entry.get("ConversationStateTransitionCriteria") or []:
+            if not (isinstance(criterion, dict)
+                    and criterion.get("Analyzer") == "TurnCountConversationStateTransitionCriteria"):
+                continue
+            try:
+                turns = int(str(criterion.get("Prompt") or "").strip())
+            except ValueError:
+                continue
+            if turns < 2:
+                return (f"a TurnCountConversationStateTransitionCriteria 'Prompt' of {turns} needs "
+                        "'session_first_reply_flag' set to 'skip_TransitionCriteria' or 'ignore_EntryUtterance'")
+        return ""
 
     def ReplaceBranch(self, old_keys: Any, new_states: dict, rewritten_states: dict,
                       source: str = "") -> tuple[bool, str]:
@@ -439,6 +484,9 @@ class SystemState:
                 return False, f"the entry of {k!r} is a dict, and its 'questions' a list"
             if self._SocketListRefusal(entry):
                 return False, f"the entry of {k!r}: " + self._SocketListRefusal(entry)
+            refusal = self._TurnCountRefusal(entry)
+            if refusal:
+                return False, f"the entry of {k!r}: " + refusal
             for criterion in entry.get("ConversationStateTransitionCriteria") or []:
                 target = criterion.get("TargetConversationState") if isinstance(criterion, dict) else None
                 if not isinstance(target, str) or target == k or target not in after:
@@ -497,9 +545,9 @@ class SystemState:
         'PromptBlocks'" when the flow is not such a dict. The second begins "ConversationStates keys must be state
         indexes as strings" when a key is not a string of digits. The third begins "conversation state" followed by the
         key and "must be a dict". The fourth begins "state" followed by the key and "'questions' must be a list" when
-        ``questions`` is not a list. The fifth begins "ConversationStates has no entry for the first state '0'". The
-        sixth begins "a flow needs 'PromptBlocks' with 'ConversationFramePrompt' (one text for the whole conversation)
-        and 'IllocutionaryPrompt'". Called by ``illocutionary_lifecycles.core.ConversationInit.ConversationInit`` after the
+        ``questions`` is not a list. The fifth begins "state" followed by the key and the text of ``_TurnCountRefusal``.
+        The sixth begins "ConversationStates has no entry for the first state '0'". The seventh begins "a flow needs
+        'PromptBlocks' with 'ConversationFramePrompt' (one text for the whole conversation) and 'IllocutionaryPrompt'". Called by ``illocutionary_lifecycles.core.ConversationInit.ConversationInit`` after the
         stored flow, if any, has been recovered.
         """
         bundle = self.ConversationStateInitBundle
@@ -531,6 +579,9 @@ class SystemState:
                     f"{type(StateEntry['questions']).__name__}. Each item is one question the question checker "
                     "(QuestionCompleteCriteria) tries to get answered in this state, for example "
                     "['What do you want?', {'question': 'Fries?', 'options': ['yes', 'no']}]; a single question is a list of one.")
+            refusal = self._TurnCountRefusal(StateEntry)
+            if refusal:
+                raise ValueError(f"state {key!r}: " + refusal)
         if str(self.conversation_state) not in states:
             raise ValueError(
                 f"ConversationStates has no entry for the first state {str(self.conversation_state)!r}; keys are {sorted(states)}. "

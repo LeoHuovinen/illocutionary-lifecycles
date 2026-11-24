@@ -47,7 +47,10 @@ async def TurnCountTransitionAnalyzer(
 
     The number is the ``Prompt`` of the criteria entry at ``WithinConversationStateOrdinal``, written as an integer
     string such as "3". The criteria run in the second pass, after the refresh that counts the current user turn, so
-    the count already includes this turn, and a number of 1 leaves the state on its first user utterance.
+    the count already includes this turn. A state just entered also counts the utterance that moved the conversation
+    into it, so a number of 1 there would be met at once and the state left before it replied. A number of 1 is
+    therefore allowed only in a state whose ``session_first_reply_flag`` makes it reply first, as
+    ``SystemState._TurnCountRefusal`` explains.
     ``UserMemoryFace`` and ``WindowFace`` are accepted because every criterion is called with them and are not used.
     """
     _Threshold = CONVERSATION_STATE_TURNS
