@@ -434,6 +434,26 @@ class SessionProvider:
             return False
         return self.SystemState.set_ignore_memories(bool(Enabled))
 
+    def SetAnalyzerInstance(self, Declaration: dict) -> tuple[bool, str]:
+        if self.SystemState is None:
+            return False, "the session has not started"
+        Identifier = str((Declaration or {}).get("identifier") or "").strip()
+        Name = str((Declaration or {}).get("Analyzer") or "").strip()
+        if not Identifier or not Name:
+            return False, "an analyzer instance needs an 'identifier' and an 'Analyzer'"
+        from illocutionary_lifecycles.analyzers.AnalyzerBase import RequireAnalyzers
+        try:
+            RequireAnalyzers([Name])
+        except LookupError as exc:
+            return False, str(exc)
+        self.SystemState.AnalyzerInstanceDeclarations[Identifier] = dict(Declaration)
+        return True, ""
+
+    def RemoveAnalyzerInstance(self, Identifier: str) -> bool:
+        if self.SystemState is None:
+            return False
+        return self.SystemState.AnalyzerInstanceDeclarations.pop(str(Identifier), None) is not None
+
     def SetNonconversationalContentSocket(self, Content: str) -> bool:
         """Place ``Content`` as the session's nonconversational content, or remove it when ``Content`` is empty, and
         return whether it was applied, which is false before ``start``.

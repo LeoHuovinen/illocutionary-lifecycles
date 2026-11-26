@@ -102,6 +102,8 @@ class SystemState:
     # The server's function that returns its sockets' texts by name, called each time a reply is composed. A function
     # and never a text, because IL stores no socket text, as ``SessionProvider.SetNonconversationalSocketReader`` says.
     NonconversationalSocketReader: Any = None
+    AnalyzerInstanceDeclarations: dict = field(default_factory=dict, repr=False)
+    AnalyzerInstancesLastUtteranceIdx: int = -1
     # Every socket name the flow lists when the session starts, a frozenset set once at the first state entry and never
     # changed, the immutable side against which flow changes are checked, and ``None`` before that entry. The mutable side, the
     # names the current state shows, is the pragmatic field ``pNonconversationalSocketInstancesState``.

@@ -239,6 +239,13 @@ async def SyncCycle(
                 continue
             else:
                 Calls.append(Analyzer(UserMemoryFace, WindowFace, PragmaticState))
+        Fresh = TurnCounter and UserUtteranceIdx != SystemState.AnalyzerInstancesLastUtteranceIdx
+        if Fresh:
+            SystemState.AnalyzerInstancesLastUtteranceIdx = UserUtteranceIdx
+        for Declaration in (list(SystemState.AnalyzerInstanceDeclarations.values()) if Fresh else []):
+            Instance = GetAnalyzer(str(Declaration.get("Analyzer")))
+            if Instance is not None:
+                Calls.append(Instance(UserMemoryFace, WindowFace, PragmaticState, Declaration))
 
         # A state's ordered list of transition criteria: each entry gets one run of the
         # criterion it names, with the entry's position. Two entries that name the same
@@ -290,7 +297,7 @@ async def SyncCycle(
                     "prompt": getattr(Result, "prompt", "") or "",
                 }
                 continue
-            ActiveAnalyzerResults[Result.AnalyzerType] = {
+            ActiveAnalyzerResults[getattr(Result, "AnalyzerId", "") or Result.AnalyzerType] = {
                 "success": True,
                 "value": Result.value,
                 "AnalyzerType": Result.AnalyzerType,
