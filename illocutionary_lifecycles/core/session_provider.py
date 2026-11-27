@@ -56,6 +56,7 @@ A typed conversation, with ``flow`` as the dict loaded from a flow file, runs as
 """
 from __future__ import annotations
 
+import copy
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -434,25 +435,85 @@ class SessionProvider:
             return False
         return self.SystemState.set_ignore_memories(bool(Enabled))
 
-    def SetAnalyzerInstance(self, Declaration: dict) -> tuple[bool, str]:
+    def SetAnalyzerInstance(self, CustomAnalyzerName: str, CustomAnalyzerPrompt: str,
+                            CustomAnalyzerOutputSchema: dict) -> tuple[bool, str]:
+        """Instantiate one custom analyzer for this session from its three arguments, and return a pair of true and an
+        empty string when it was instantiated, or false and the reason when it was not.
+
+        NOTE: This is an experimental feature. You will only need this for an analyzer that does not exist when the
+        session starts, during an ongoing conversation session. Only use this feature if you are sure you need it. It
+        goes against the basic idea of IL, a flow written in advance whose states (eg. during runtime, upcoming
+        ConversationStates in the active flow in SystemState) name only registered analyzers.
+
+        The arguments are the fields of
+        ``illocutionary_lifecycles.analyzers.AnalyzerBase.CustomAnalyzerDeclaration``, whose docstring explains them,
+        and the analyzer is built by ``illocutionary_lifecycles.analyzers.AnalyzerBase.InstantiateCustomAnalyzer``.
+        It is kept in ``SystemState.CustomAnalyzerInstances`` under ``CustomAnalyzerName`` and runs only while the
+        conversation is in a state that lists that name in its ``Analyzers``, exactly like that state's other analyzers.
+        Such a state can only be written after this call, through ``ApplyStateChange`` or ``ReplaceBranch``, because a
+        flow given at session start may name only registered analyzers. The call is refused before ``start``, for a name
+        that does not end in ``CustomAnalyzer`` or that a registered analyzer already has, for an empty prompt, and for
+        an output schema that is not a dict whose every value is a list of strings, "str" or "int". An accepted call is
+        recorded as a ``CustomAnalyzerInstantiationEvent`` before it takes effect, so a reopened session has the same
+        custom analyzers, and a second call under the same name replaces the first."""
         if self.SystemState is None:
             return False, "the session has not started"
-        Identifier = str((Declaration or {}).get("identifier") or "").strip()
-        Name = str((Declaration or {}).get("Analyzer") or "").strip()
-        if not Identifier or not Name:
-            return False, "an analyzer instance needs an 'identifier' and an 'Analyzer'"
-        from illocutionary_lifecycles.analyzers.AnalyzerBase import RequireAnalyzers
-        try:
-            RequireAnalyzers([Name])
-        except LookupError as exc:
-            return False, str(exc)
-        self.SystemState.AnalyzerInstanceDeclarations[Identifier] = dict(Declaration)
+        from illocutionary_lifecycles.analyzers.AnalyzerBase import (
+            CustomAnalyzerDeclaration,
+            ImportAllAnalyzers,
+            InstantiateCustomAnalyzer,
+        )
+        CheckedCustomAnalyzerName = str(CustomAnalyzerName or "").strip()
+        if not CheckedCustomAnalyzerName.endswith("CustomAnalyzer") or CheckedCustomAnalyzerName == "CustomAnalyzer":
+            return False, "a custom analyzer's name ends in 'CustomAnalyzer', with a name of its own before it"
+        if CheckedCustomAnalyzerName in ImportAllAnalyzers():
+            return False, f"{CheckedCustomAnalyzerName!r} is already the name of a registered analyzer"
+        if not str(CustomAnalyzerPrompt or "").strip():
+            return False, "a custom analyzer needs a prompt"
+        CustomAnalyzerOutputKindsValid = isinstance(CustomAnalyzerOutputSchema, dict) and bool(CustomAnalyzerOutputSchema) and all(
+            isinstance(CustomAnalyzerOutputKey, str) and CustomAnalyzerOutputKey
+            and (CustomAnalyzerOutputKind in ("str", "int")
+                 or (isinstance(CustomAnalyzerOutputKind, list) and CustomAnalyzerOutputKind
+                     and all(isinstance(CustomAnalyzerOutputChoice, str) for CustomAnalyzerOutputChoice in CustomAnalyzerOutputKind)))
+            for CustomAnalyzerOutputKey, CustomAnalyzerOutputKind in CustomAnalyzerOutputSchema.items())
+        if not CustomAnalyzerOutputKindsValid:
+            return False, ("a custom analyzer's output schema maps every key to a list of strings, 'str' or 'int'")
+        if self.SystemState.Record is not None:
+            self.SystemState.Record.UpsertCustomAnalyzerInstantiationEvent(
+                CheckedCustomAnalyzerName, str(CustomAnalyzerPrompt), CustomAnalyzerOutputSchema)
+        self.SystemState.CustomAnalyzerInstances[CheckedCustomAnalyzerName] = InstantiateCustomAnalyzer(
+            CustomAnalyzerDeclaration(CustomAnalyzerName=CheckedCustomAnalyzerName,
+                                      CustomAnalyzerPrompt=str(CustomAnalyzerPrompt),
+                                      CustomAnalyzerOutputSchema=copy.deepcopy(CustomAnalyzerOutputSchema)))
         return True, ""
 
-    def RemoveAnalyzerInstance(self, Identifier: str) -> bool:
+    def RemoveAnalyzerInstance(self, CustomAnalyzerName: str) -> bool:
+        """Remove the custom analyzer kept under ``CustomAnalyzerName`` to free its memory, and return true, or return
+        false before ``start``, when there is none under that name, or while any state of the flow (eg. during runtime,
+        upcoming ConversationStates in the active flow in SystemState) still lists it among its analyzers.
+
+        NOTE: This is only a cleanup function. You will not need it in almost any session. It exists for a long
+        session that instantiates custom analyzers without end, where the ones no state lists any more would otherwise
+        stay in memory until the session ends. A custom analyzer is never removed to stop it from running, because it
+        runs only in the states that list it.
+
+        A removal is refused while any state lists the analyzer, and not only the current one, because a state that
+        names a missing analyzer would make a reopened session refuse to start. The removal is recorded as a
+        ``CustomAnalyzerInstantiationEvent``, so a reopened session does not instantiate it again. The note of
+        ``SetAnalyzerInstance`` applies here too."""
         if self.SystemState is None:
             return False
-        return self.SystemState.AnalyzerInstanceDeclarations.pop(str(Identifier), None) is not None
+        CheckedCustomAnalyzerName = str(CustomAnalyzerName or "")
+        if CheckedCustomAnalyzerName not in self.SystemState.CustomAnalyzerInstances:
+            return False
+        for FlowStateEntry in (self.SystemState.ConversationStates or {}).values():
+            FlowStateAnalyzerNames = list((FlowStateEntry or {}).get("Analyzers") or []) if isinstance(FlowStateEntry, dict) else []
+            if CheckedCustomAnalyzerName in FlowStateAnalyzerNames:
+                return False
+        if self.SystemState.Record is not None:
+            self.SystemState.Record.UpsertCustomAnalyzerInstantiationEvent(CheckedCustomAnalyzerName, CustomAnalyzerRemoved=True)
+        del self.SystemState.CustomAnalyzerInstances[CheckedCustomAnalyzerName]
+        return True
 
     def SetNonconversationalContentSocket(self, Content: str) -> bool:
         """Place ``Content`` as the session's nonconversational content, or remove it when ``Content`` is empty, and

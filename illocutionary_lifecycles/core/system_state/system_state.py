@@ -102,8 +102,10 @@ class SystemState:
     # The server's function that returns its sockets' texts by name, called each time a reply is composed. A function
     # and never a text, because IL stores no socket text, as ``SessionProvider.SetNonconversationalSocketReader`` says.
     NonconversationalSocketReader: Any = None
-    AnalyzerInstanceDeclarations: dict = field(default_factory=dict, repr=False)
-    AnalyzerInstancesLastUtteranceIdx: int = -1
+    # The custom analyzers instantiated for this session, by name, as ``SessionProvider.SetAnalyzerInstance`` explains,
+    # each run only in a state (eg. during runtime, upcoming ConversationStates in the active flow in SystemState) that
+    # lists it in its ``Analyzers``. Empty in a session that instantiates none, which then runs exactly as before.
+    CustomAnalyzerInstances: dict = field(default_factory=dict, repr=False)
     # Every socket name the flow lists when the session starts, a frozenset set once at the first state entry and never
     # changed, the immutable side against which flow changes are checked, and ``None`` before that entry. The mutable side, the
     # names the current state shows, is the pragmatic field ``pNonconversationalSocketInstancesState``.
@@ -243,6 +245,16 @@ class SystemState:
             else:
                 self._PutStateIntoFlow(str(change.get("state_key")), copy.deepcopy(change.get("entry")),
                                        change.get("prompt"), with_states=False)
+        from illocutionary_lifecycles.analyzers.AnalyzerBase import CustomAnalyzerDeclaration, InstantiateCustomAnalyzer
+        for RecordedInstantiationEvent in self.Record.read_cache.streams().get("CustomAnalyzerInstantiationEvent") or []:
+            RecordedCustomAnalyzerName = str(RecordedInstantiationEvent.get("CustomAnalyzerName") or "")
+            if RecordedInstantiationEvent.get("CustomAnalyzerRemoved"):
+                self.CustomAnalyzerInstances.pop(RecordedCustomAnalyzerName, None)
+                continue
+            self.CustomAnalyzerInstances[RecordedCustomAnalyzerName] = InstantiateCustomAnalyzer(CustomAnalyzerDeclaration(
+                CustomAnalyzerName=RecordedCustomAnalyzerName,
+                CustomAnalyzerPrompt=str(RecordedInstantiationEvent.get("CustomAnalyzerPrompt") or ""),
+                CustomAnalyzerOutputSchema=copy.deepcopy(RecordedInstantiationEvent.get("CustomAnalyzerOutputSchema") or {})))
         return True
 
     def PromptBlocks(self) -> dict[str, Any]:
@@ -349,7 +361,7 @@ class SystemState:
         names += [n for n in (entry.get("Analyzers") or []) if isinstance(n, str) and n.strip()]
         from illocutionary_lifecycles.analyzers.AnalyzerBase import RequireAnalyzers
         try:
-            RequireAnalyzers([n for n in names if n])
+            RequireAnalyzers([n for n in names if n and n not in self.CustomAnalyzerInstances])
         except LookupError as exc:
             return False, str(exc)
         previous_entry = self.ConversationStates.get(key)
@@ -504,7 +516,7 @@ class SystemState:
                     return False, f"the state {k!r} would still lead to {target!r}, rewrite it in the same swap"
         from illocutionary_lifecycles.analyzers.AnalyzerBase import RequireAnalyzers
         try:
-            RequireAnalyzers([n for n in names if n])
+            RequireAnalyzers([n for n in names if n and n not in self.CustomAnalyzerInstances])
         except LookupError as exc:
             return False, str(exc)
         prompts = self.PromptBlocks().get("IllocutionaryPrompt") or {}

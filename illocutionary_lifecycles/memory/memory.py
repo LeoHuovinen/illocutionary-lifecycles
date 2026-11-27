@@ -268,6 +268,30 @@ class FlowChangeEvent(ConversationEvent):
 
 
 @dataclass
+class CustomAnalyzerInstantiationEvent(ConversationEvent):
+    """The recorded event of one custom analyzer instantiated or removed while the conversation runs, written by
+    ``Memory.UpsertCustomAnalyzerInstantiationEvent`` under a refresh index of its own before the change takes effect.
+    A later addition, present only in sessions whose server instantiated custom analyzers.
+
+    NOTE: This is an experimental feature. You will only need this for an analyzer that does not exist when the
+    session starts, during an ongoing conversation session. Only use this feature if you are sure you need it, as
+    ``illocutionary_lifecycles.analyzers.AnalyzerBase.CustomAnalyzerDeclaration`` explains.
+
+    ``CustomAnalyzerName``, ``CustomAnalyzerPrompt`` and ``CustomAnalyzerOutputSchema`` are the fields of the
+    instantiated ``CustomAnalyzerDeclaration``. ``CustomAnalyzerRemoved`` is true for a removal, which records the name
+    alone. ``illocutionary_lifecycles.core.system_state.system_state.SystemState.RecoverInit`` replays these events in
+    order, so a reopened session has the same custom analyzers.
+    """
+
+    CATEGORY: ClassVar[str] = "CustomAnalyzerInstantiationEvent"
+
+    CustomAnalyzerName: str = ""
+    CustomAnalyzerPrompt: str = ""
+    CustomAnalyzerOutputSchema: Any = None
+    CustomAnalyzerRemoved: bool = False
+
+
+@dataclass
 class ReadCache:
     """The in-memory copy of one conversation's record, the only copy the running conversation reads, held by
     ``Memory`` as ``read_cache``, as the module docstring above explains.
@@ -513,6 +537,24 @@ class Memory:
         self.append(event)
         self.drain()
         return idx
+
+    def UpsertCustomAnalyzerInstantiationEvent(self, CustomAnalyzerName: str, CustomAnalyzerPrompt: str = "",
+                                               CustomAnalyzerOutputSchema: Any = None,
+                                               CustomAnalyzerRemoved: bool = False) -> int:
+        """Record one ``CustomAnalyzerInstantiationEvent`` with these fields, copying
+        ``CustomAnalyzerOutputSchema`` deeply, under a refresh index of its own, write it to the vendor at once, and return that
+        index. Called by ``SessionProvider.SetAnalyzerInstance`` and ``SessionProvider.RemoveAnalyzerInstance`` before
+        the change takes effect."""
+        RecordedInstantiationEvent = CustomAnalyzerInstantiationEvent(
+            CustomAnalyzerName=str(CustomAnalyzerName), CustomAnalyzerPrompt=str(CustomAnalyzerPrompt or ""),
+            CustomAnalyzerOutputSchema=copy.deepcopy(CustomAnalyzerOutputSchema),
+            CustomAnalyzerRemoved=bool(CustomAnalyzerRemoved))
+        RecordedInstantiationEventIdx = self._next_refresh_idx
+        RecordedInstantiationEvent.event_refresh_idx = RecordedInstantiationEventIdx
+        self._next_refresh_idx += 1
+        self.append(RecordedInstantiationEvent)
+        self.drain()
+        return RecordedInstantiationEventIdx
 
     def UpsertRefreshEvents(self, RecordedEvents: Iterable[ConversationEvent]) -> None:
         """Give every event in ``RecordedEvents`` the same new refresh index, add each to the in-memory copy, and return

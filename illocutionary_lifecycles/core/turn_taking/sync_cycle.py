@@ -198,7 +198,11 @@ async def SyncCycle(
         return {"ConversationStateAdvanced": False}
 
     ActiveIds = getattr(PragmaticState, "pActiveAnalyzersState", None) or []
-    Resolved = [(AnalyzerId, GetAnalyzer(AnalyzerId)) for AnalyzerId in ActiveIds]
+    # A custom analyzer instantiated for this session, as ``SessionProvider.SetAnalyzerInstance`` explains, is found
+    # by its name before the registered analyzers, and is then run exactly like them.
+    CustomAnalyzerInstances = getattr(SystemState, "CustomAnalyzerInstances", None) or {}
+    Resolved = [(AnalyzerId, CustomAnalyzerInstances.get(AnalyzerId) or GetAnalyzer(AnalyzerId))
+                for AnalyzerId in ActiveIds]
     Resolved = [(AnalyzerId, Analyzer) for AnalyzerId, Analyzer in Resolved if Analyzer is not None]
 
     # An analyzer whose name ends in ``QuestionCompleteCriteria`` is a question checker and runs
@@ -239,13 +243,6 @@ async def SyncCycle(
                 continue
             else:
                 Calls.append(Analyzer(UserMemoryFace, WindowFace, PragmaticState))
-        Fresh = TurnCounter and UserUtteranceIdx != SystemState.AnalyzerInstancesLastUtteranceIdx
-        if Fresh:
-            SystemState.AnalyzerInstancesLastUtteranceIdx = UserUtteranceIdx
-        for Declaration in (list(SystemState.AnalyzerInstanceDeclarations.values()) if Fresh else []):
-            Instance = GetAnalyzer(str(Declaration.get("Analyzer")))
-            if Instance is not None:
-                Calls.append(Instance(UserMemoryFace, WindowFace, PragmaticState, Declaration))
 
         # A state's ordered list of transition criteria: each entry gets one run of the
         # criterion it names, with the entry's position. Two entries that name the same
@@ -297,7 +294,7 @@ async def SyncCycle(
                     "prompt": getattr(Result, "prompt", "") or "",
                 }
                 continue
-            ActiveAnalyzerResults[getattr(Result, "AnalyzerId", "") or Result.AnalyzerType] = {
+            ActiveAnalyzerResults[Result.AnalyzerType] = {
                 "success": True,
                 "value": Result.value,
                 "AnalyzerType": Result.AnalyzerType,

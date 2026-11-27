@@ -155,6 +155,78 @@ AnalyzerFn = Callable[..., Awaitable[AnalysisResult]]
 ANALYZER_REGISTRY: dict[str, AnalyzerFn] = {}
 
 
+@dataclass(frozen=True)
+class CustomAnalyzerDeclaration:
+    """The arguments a custom analyzer is instantiated with, by ``InstantiateCustomAnalyzer`` in this module, while a
+    session runs.
+
+    NOTE: This is an experimental feature. You will only need this for an analyzer that does not exist when the
+    session starts, during an ongoing conversation session. Only use this feature if you are sure you need it. It goes
+    against the basic idea of IL, a flow written in advance whose states (eg. during runtime, upcoming
+    ConversationStates in the active flow in SystemState) name only registered analyzers.
+
+    ``CustomAnalyzerName`` is the name the instance is kept under and the name a state lists in its ``Analyzers`` to
+    run it, and it ends in ``CustomAnalyzer``, so it is never taken for a transition criterion or a question checker.
+    ``CustomAnalyzerPrompt`` is the text the model is given before the current state's utterances.
+    ``CustomAnalyzerOutputSchema`` maps every key of the model's reply to what that key holds, a list of the only
+    strings it may be, "str" for any string, or "int" for any whole number. The declaration is created by
+    ``illocutionary_lifecycles.core.session_provider.SessionProvider.SetAnalyzerInstance`` and again by
+    ``illocutionary_lifecycles.core.system_state.system_state.SystemState.RecoverInit`` from the recorded fields.
+    """
+    CustomAnalyzerName: str
+    CustomAnalyzerPrompt: str
+    CustomAnalyzerOutputSchema: dict
+
+    def CustomAnalyzerOutputJsonSchema(self) -> dict:
+        """Return ``CustomAnalyzerOutputSchema`` as the strict JSON Schema the analyzer client holds the model's reply
+        to, an object with every key required and no other key, a string limited to the listed strings for a list, a
+        string for "str", and an integer for "int". Called on every call by the analyzer that
+        ``InstantiateCustomAnalyzer`` builds."""
+        CustomAnalyzerOutputProperties = {}
+        for CustomAnalyzerOutputKey, CustomAnalyzerOutputKind in self.CustomAnalyzerOutputSchema.items():
+            if isinstance(CustomAnalyzerOutputKind, list):
+                CustomAnalyzerOutputProperties[CustomAnalyzerOutputKey] = {
+                    "type": "string",
+                    "enum": [str(CustomAnalyzerOutputChoice) for CustomAnalyzerOutputChoice in CustomAnalyzerOutputKind],
+                }
+            elif CustomAnalyzerOutputKind == "int":
+                CustomAnalyzerOutputProperties[CustomAnalyzerOutputKey] = {"type": "integer"}
+            else:
+                CustomAnalyzerOutputProperties[CustomAnalyzerOutputKey] = {"type": "string"}
+        return {"type": "object", "properties": CustomAnalyzerOutputProperties,
+                "required": list(CustomAnalyzerOutputProperties), "additionalProperties": False}
+
+
+def InstantiateCustomAnalyzer(InstantiatedCustomAnalyzerDeclaration: CustomAnalyzerDeclaration) -> AnalyzerFn:
+    """Return a new analyzer built from ``InstantiatedCustomAnalyzerDeclaration`` alone, called like every other analyzer with
+    ``UserMemoryFace``, ``WindowFace`` and ``PragmaticState``, and keep nothing.
+
+    The analyzer sends the declaration's prompt followed by the current state's utterances to the analyzer model client
+    through its ``complete_json``, with the declaration's ``CustomAnalyzerOutputJsonSchema`` as the strict schema, and
+    returns an ``AnalysisResult`` whose ``value`` is the reply, whose ``AnalyzerType`` is the declaration's
+    ``CustomAnalyzerName`` and whose ``prompt`` is the text sent. A model call that raises gives an empty ``value`` and is
+    not raised. Two declarations with the same fields give analyzers that send the same request to the model,
+    which is what lets a reopened session rebuild its custom analyzers from the record. The note of ``CustomAnalyzerDeclaration`` applies here too.
+    """
+    async def CustomAnalyzerInstanceCall(UserMemoryFace: Any, WindowFace: Any, PragmaticState: Any) -> AnalysisResult:
+        """Return this custom analyzer's ``AnalysisResult`` for the current state's utterances, as
+        ``InstantiateCustomAnalyzer`` above explains."""
+        from illocutionary_lifecycles.core.clients.llm import analyzer_llm
+        CustomAnalyzerUtteranceLines = [CustomAnalyzerUtteranceView.transcription for CustomAnalyzerUtteranceView in WindowFace()
+                                        if getattr(CustomAnalyzerUtteranceView, "transcription", "")]
+        CustomAnalyzerSentPrompt = (InstantiatedCustomAnalyzerDeclaration.CustomAnalyzerPrompt + "\nRecent conversation:\n"
+                                    + "\n".join(CustomAnalyzerUtteranceLines))
+        try:
+            CustomAnalyzerReplyValue = await analyzer_llm().complete_json(
+                CustomAnalyzerSentPrompt, schema=InstantiatedCustomAnalyzerDeclaration.CustomAnalyzerOutputJsonSchema(),
+                schema_name=InstantiatedCustomAnalyzerDeclaration.CustomAnalyzerName)
+        except Exception:
+            CustomAnalyzerReplyValue = {}
+        return AnalysisResult(value=CustomAnalyzerReplyValue, AnalyzerType=InstantiatedCustomAnalyzerDeclaration.CustomAnalyzerName,
+                              prompt=CustomAnalyzerSentPrompt)
+    return CustomAnalyzerInstanceCall
+
+
 def register(RegisteredName: str) -> Callable[[AnalyzerFn], AnalyzerFn]:
     """Return a decorator that stores the decorated analyzer function in ``ANALYZER_REGISTRY`` under
     ``RegisteredName`` and returns the function unchanged. Every analyzer module calls it once, when the module is

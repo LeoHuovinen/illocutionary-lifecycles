@@ -145,7 +145,10 @@ def ConversationInit(
         SystemState.Record.UpsertConversationInitEvent(SystemState.ConversationStateInitBundle)
     SystemState.load_conversation_states_from_init()      # checks the flow's shape first; one clear error for a wrong flow
     design_analyzers = ConversationInitAnalyzerCollection(SystemState.ConversationStateInitBundle)
-    RegisterSessionAnalyzers(design_analyzers)
+    # A reopened session's custom analyzers were instantiated again by ``RecoverInit`` above, from the record. A new
+    # session has none, so a flow given at session start still names only registered analyzers.
+    RegisterSessionAnalyzers([AnalyzerName for AnalyzerName in design_analyzers
+                              if AnalyzerName not in SystemState.CustomAnalyzerInstances])
     # The settings are applied before the first state is entered, because entering a state
     # reads them.
     for Key, Value in (InitSystemSetterSettings or {}).items():
