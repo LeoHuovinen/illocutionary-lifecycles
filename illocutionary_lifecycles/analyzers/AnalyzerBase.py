@@ -169,19 +169,35 @@ class CustomAnalyzerDeclaration:
     run it, and it ends in ``CustomAnalyzer``, so it is never taken for a transition criterion or a question checker.
     ``CustomAnalyzerPrompt`` is the text the model is given before the current state's utterances.
     ``CustomAnalyzerOutputSchema`` maps every key of the model's reply to what that key holds, a list of the only
-    strings it may be, "str" for any string, or "int" for any whole number. The declaration is created by
-    ``illocutionary_lifecycles.core.session_provider.SessionProvider.SetAnalyzerInstance`` and again by
-    ``illocutionary_lifecycles.core.system_state.system_state.SystemState.RecoverInit`` from the recorded fields.
+    strings it may be, "str" for any string, or "int" for any whole number.
+    ``CustomAnalyzerReadsNonconversationalSocketFeed`` says whether the analyzer is also given the nonconversational
+    socket feeds the current state shows, read the same way the reply reads them, and is false unless set.
+
+    A nonconversational feed is the text a server keeps in a socket, a pragmatically useful description of something
+    neither the user nor the assistant said (for example what is on a screen, what the user just touched, captions or
+    narration, recent events with their times, what has been built so far, how much time has passed, or the server's
+    own summary of what happened earlier). It is always text the server has already written for the conversation, never
+    the source it describes, and the server replaces it whenever the source changes. Its form is the server's choice,
+    such as one sentence describing the present, a single line about what the user is focusing on, a short list of
+    recent events, lines of names and values, or nothing when there is nothing to show. IL keeps no copy and no history
+    of a feed, and reads whatever it says each time a custom analyzer that reads socket feeds runs, as
+    ``illocutionary_lifecycles.core.system_state.system_state.SystemState._NonconversationalSocketFeeds`` explains.
+
+    The declaration is created only by
+    ``illocutionary_lifecycles.core.system_state.system_state.SystemState._InstantiateCustomAnalyzer``, for a custom
+    analyzer instantiated through ``SystemState.SetAnalyzerInstance`` and again for one rebuilt by
+    ``SystemState.RecoverInit`` from the recorded fields.
     """
     CustomAnalyzerName: str
     CustomAnalyzerPrompt: str
     CustomAnalyzerOutputSchema: dict
+    CustomAnalyzerReadsNonconversationalSocketFeed: bool = False
 
-    def CustomAnalyzerOutputJsonSchema(self) -> dict:
+    def _CustomAnalyzerOutputJsonSchema(self) -> dict:
         """Return ``CustomAnalyzerOutputSchema`` as the strict JSON Schema the analyzer client holds the model's reply
         to, an object with every key required and no other key, a string limited to the listed strings for a list, a
-        string for "str", and an integer for "int". Called on every call by the analyzer that
-        ``InstantiateCustomAnalyzer`` builds."""
+        string for "str", and an integer for "int". Called only by the analyzer that ``InstantiateCustomAnalyzer`` in
+        this module builds, each time it runs."""
         CustomAnalyzerOutputProperties = {}
         for CustomAnalyzerOutputKey, CustomAnalyzerOutputKind in self.CustomAnalyzerOutputSchema.items():
             if isinstance(CustomAnalyzerOutputKind, list):
@@ -197,12 +213,18 @@ class CustomAnalyzerDeclaration:
                 "required": list(CustomAnalyzerOutputProperties), "additionalProperties": False}
 
 
-def InstantiateCustomAnalyzer(InstantiatedCustomAnalyzerDeclaration: CustomAnalyzerDeclaration) -> AnalyzerFn:
+def InstantiateCustomAnalyzer(InstantiatedCustomAnalyzerDeclaration: CustomAnalyzerDeclaration,
+                              NonconversationalSocketFeed: Callable[[], str] | None = None) -> AnalyzerFn:
     """Return a new analyzer built from ``InstantiatedCustomAnalyzerDeclaration`` alone, called like every other analyzer with
     ``UserMemoryFace``, ``WindowFace`` and ``PragmaticState``, and keep nothing.
 
     The analyzer sends the declaration's prompt followed by the current state's utterances to the analyzer model client
-    through its ``complete_json``, with the declaration's ``CustomAnalyzerOutputJsonSchema`` as the strict schema, and
+    through its ``complete_json``. When the declaration's ``CustomAnalyzerReadsNonconversationalSocketFeed`` is true, it
+    also calls ``NonconversationalSocketFeed`` each time it runs, a callable bound to the session that returns the
+    nonconversational socket feeds the current state shows, and adds them after the utterances when there are any.
+    That callable is ``SystemState._NonconversationalSocketFeeds`` of the session, handed over only by
+    ``SystemState._InstantiateCustomAnalyzer``, so the analyzer itself is still called with the normal arguments only. The call to the
+    model uses the declaration's ``_CustomAnalyzerOutputJsonSchema`` as the strict schema, and
     returns an ``AnalysisResult`` whose ``value`` is the reply, whose ``AnalyzerType`` is the declaration's
     ``CustomAnalyzerName`` and whose ``prompt`` is the text sent. A model call that raises gives an empty ``value`` and is
     not raised. Two declarations with the same fields give analyzers that send the same request to the model,
@@ -216,9 +238,13 @@ def InstantiateCustomAnalyzer(InstantiatedCustomAnalyzerDeclaration: CustomAnaly
                                         if getattr(CustomAnalyzerUtteranceView, "transcription", "")]
         CustomAnalyzerSentPrompt = (InstantiatedCustomAnalyzerDeclaration.CustomAnalyzerPrompt + "\nRecent conversation:\n"
                                     + "\n".join(CustomAnalyzerUtteranceLines))
+        if InstantiatedCustomAnalyzerDeclaration.CustomAnalyzerReadsNonconversationalSocketFeed and NonconversationalSocketFeed:
+            CustomAnalyzerShownSocketFeed = str(NonconversationalSocketFeed() or "").strip()
+            if CustomAnalyzerShownSocketFeed:
+                CustomAnalyzerSentPrompt += "\nNonconversational socket feed shown now:\n" + CustomAnalyzerShownSocketFeed
         try:
             CustomAnalyzerReplyValue = await analyzer_llm().complete_json(
-                CustomAnalyzerSentPrompt, schema=InstantiatedCustomAnalyzerDeclaration.CustomAnalyzerOutputJsonSchema(),
+                CustomAnalyzerSentPrompt, schema=InstantiatedCustomAnalyzerDeclaration._CustomAnalyzerOutputJsonSchema(),
                 schema_name=InstantiatedCustomAnalyzerDeclaration.CustomAnalyzerName)
         except Exception:
             CustomAnalyzerReplyValue = {}

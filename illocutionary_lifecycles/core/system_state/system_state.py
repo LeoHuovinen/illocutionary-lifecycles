@@ -102,7 +102,7 @@ class SystemState:
     # The server's function that returns its sockets' texts by name, called each time a reply is composed. A function
     # and never a text, because IL stores no socket text, as ``SessionProvider.SetNonconversationalSocketReader`` says.
     NonconversationalSocketReader: Any = None
-    # The custom analyzers instantiated for this session, by name, as ``SessionProvider.SetAnalyzerInstance`` explains,
+    # The custom analyzers instantiated for this session, by name, as ``SetAnalyzerInstance`` in this class explains,
     # each run only in a state (eg. during runtime, upcoming ConversationStates in the active flow in SystemState) that
     # lists it in its ``Analyzers``. Empty in a session that instantiates none, which then runs exactly as before.
     CustomAnalyzerInstances: dict = field(default_factory=dict, repr=False)
@@ -245,16 +245,16 @@ class SystemState:
             else:
                 self._PutStateIntoFlow(str(change.get("state_key")), copy.deepcopy(change.get("entry")),
                                        change.get("prompt"), with_states=False)
-        from illocutionary_lifecycles.analyzers.AnalyzerBase import CustomAnalyzerDeclaration, InstantiateCustomAnalyzer
         for RecordedInstantiationEvent in self.Record.read_cache.streams().get("CustomAnalyzerInstantiationEvent") or []:
             RecordedCustomAnalyzerName = str(RecordedInstantiationEvent.get("CustomAnalyzerName") or "")
             if RecordedInstantiationEvent.get("CustomAnalyzerRemoved"):
                 self.CustomAnalyzerInstances.pop(RecordedCustomAnalyzerName, None)
                 continue
-            self.CustomAnalyzerInstances[RecordedCustomAnalyzerName] = InstantiateCustomAnalyzer(CustomAnalyzerDeclaration(
-                CustomAnalyzerName=RecordedCustomAnalyzerName,
-                CustomAnalyzerPrompt=str(RecordedInstantiationEvent.get("CustomAnalyzerPrompt") or ""),
-                CustomAnalyzerOutputSchema=copy.deepcopy(RecordedInstantiationEvent.get("CustomAnalyzerOutputSchema") or {})))
+            self._InstantiateCustomAnalyzer(
+                RecordedCustomAnalyzerName,
+                str(RecordedInstantiationEvent.get("CustomAnalyzerPrompt") or ""),
+                RecordedInstantiationEvent.get("CustomAnalyzerOutputSchema") or {},
+                bool(RecordedInstantiationEvent.get("CustomAnalyzerReadsNonconversationalSocketFeed")))
         return True
 
     def PromptBlocks(self) -> dict[str, Any]:
@@ -942,6 +942,151 @@ class SystemState:
         elif hasattr(self.PragmaticState, "pIgnoreMemoriesState"):
             del self.PragmaticState.pIgnoreMemoriesState
         return True
+
+    def SetAnalyzerInstance(self, CustomAnalyzerName: str, CustomAnalyzerPrompt: str,
+                            CustomAnalyzerOutputSchema: dict,
+                            CustomAnalyzerReadsNonconversationalSocketFeed: bool = False) -> tuple[bool, str]:
+        """Instantiate one custom analyzer for this session from its four arguments, and return a pair of true and an
+        empty string when it was instantiated, or false and the reason when it was not.
+
+        NOTE: This is an experimental feature. You will only need this for an analyzer that does not exist when the
+        session starts, during an ongoing conversation session. Only use this feature if you are sure you need it. It
+        goes against the basic idea of IL, a flow written in advance whose states (eg. during runtime, upcoming
+        ConversationStates in the active flow in SystemState) name only registered analyzers.
+
+        The arguments are the fields of ``illocutionary_lifecycles.analyzers.AnalyzerBase.CustomAnalyzerDeclaration``,
+        whose docstring explains them. The analyzer is built by ``_InstantiateCustomAnalyzer`` in this class, kept in
+        ``CustomAnalyzerInstances`` under ``CustomAnalyzerName``, and runs only while the conversation is in a state that
+        lists that name in its ``Analyzers``, exactly like that state's other analyzers. Such a state can only be written
+        after this call, through ``ApplyStateChange`` or ``ReplaceBranch``, because a flow given at session start may
+        name only registered analyzers. The call is refused with the reason ``_CustomAnalyzerRefusal`` gives. An accepted
+        call is recorded as a ``CustomAnalyzerInstantiationEvent`` before it takes effect, so a reopened session has the
+        same custom analyzers, and a second call under the same name replaces the first. Called by
+        ``illocutionary_lifecycles.core.session_provider.SessionProvider.SetAnalyzerInstance``."""
+        CustomAnalyzerRefusalReason = self._CustomAnalyzerRefusal(
+            CustomAnalyzerName, CustomAnalyzerPrompt, CustomAnalyzerOutputSchema,
+            CustomAnalyzerReadsNonconversationalSocketFeed)
+        if CustomAnalyzerRefusalReason:
+            return False, CustomAnalyzerRefusalReason
+        CheckedCustomAnalyzerName = str(CustomAnalyzerName).strip()
+        if self.Record is not None:
+            self.Record.UpsertCustomAnalyzerInstantiationEvent(
+                CheckedCustomAnalyzerName, str(CustomAnalyzerPrompt), CustomAnalyzerOutputSchema,
+                CustomAnalyzerReadsNonconversationalSocketFeed=CustomAnalyzerReadsNonconversationalSocketFeed)
+        self._InstantiateCustomAnalyzer(CheckedCustomAnalyzerName, str(CustomAnalyzerPrompt), CustomAnalyzerOutputSchema,
+                                        CustomAnalyzerReadsNonconversationalSocketFeed)
+        return True, ""
+
+    def RemoveAnalyzerInstance(self, CustomAnalyzerName: str) -> bool:
+        """Remove the custom analyzer kept under ``CustomAnalyzerName`` to free its memory, and return true, or return
+        false when there is none under that name, or while any state of the flow (eg. during runtime, upcoming
+        ConversationStates in the active flow in SystemState) still lists it among its analyzers.
+
+        NOTE: This is only a cleanup function. You will not need it in almost any session. It exists for a long
+        session that instantiates custom analyzers without end, where the ones no state lists any more would otherwise
+        stay in memory until the session ends. A custom analyzer is never removed to stop it from running, because it
+        runs only in the states that list it.
+
+        A removal is refused while any state lists the analyzer, and not only the current one, because a state that
+        names a missing analyzer would make a reopened session refuse to start. The removal is recorded as a
+        ``CustomAnalyzerInstantiationEvent``, so a reopened session does not instantiate it again. The note of
+        ``SetAnalyzerInstance`` applies here too. Called by
+        ``illocutionary_lifecycles.core.session_provider.SessionProvider.RemoveAnalyzerInstance``."""
+        CheckedCustomAnalyzerName = str(CustomAnalyzerName or "")
+        if CheckedCustomAnalyzerName not in self.CustomAnalyzerInstances:
+            return False
+        for FlowStateEntry in (self.ConversationStates or {}).values():
+            FlowStateAnalyzerNames = list((FlowStateEntry or {}).get("Analyzers") or []) if isinstance(FlowStateEntry, dict) else []
+            if CheckedCustomAnalyzerName in FlowStateAnalyzerNames:
+                return False
+        if self.Record is not None:
+            self.Record.UpsertCustomAnalyzerInstantiationEvent(CheckedCustomAnalyzerName, CustomAnalyzerRemoved=True)
+        del self.CustomAnalyzerInstances[CheckedCustomAnalyzerName]
+        return True
+
+    def _CustomAnalyzerRefusal(self, CustomAnalyzerName: Any, CustomAnalyzerPrompt: Any, CustomAnalyzerOutputSchema: Any,
+                               CustomAnalyzerReadsNonconversationalSocketFeed: Any) -> str:
+        """Return why these arguments may not instantiate a custom analyzer, or an empty string when they may. A name
+        must end in ``CustomAnalyzer`` with a name of its own before it, and may not be the name of a registered analyzer.
+        The prompt may not be empty. The output schema must be a dict that is not empty, whose every key is a string
+        that is not empty and whose every value is "str", "int" or a list of strings that is not empty. Whether the
+        analyzer reads the socket feeds must be true or false. Checking all of it before anything changes keeps a
+        refused call from recording or replacing anything. Called only by ``SetAnalyzerInstance`` in this class."""
+        from illocutionary_lifecycles.analyzers.AnalyzerBase import ImportAllAnalyzers
+        CheckedCustomAnalyzerName = str(CustomAnalyzerName or "").strip()
+        if not CheckedCustomAnalyzerName.endswith("CustomAnalyzer") or CheckedCustomAnalyzerName == "CustomAnalyzer":
+            return "a custom analyzer's name ends in 'CustomAnalyzer', with a name of its own before it"
+        if CheckedCustomAnalyzerName in ImportAllAnalyzers():
+            return f"{CheckedCustomAnalyzerName!r} is already the name of a registered analyzer"
+        if not str(CustomAnalyzerPrompt or "").strip():
+            return "a custom analyzer needs a prompt"
+        CustomAnalyzerOutputKindsValid = isinstance(CustomAnalyzerOutputSchema, dict) and bool(CustomAnalyzerOutputSchema) and all(
+            isinstance(CustomAnalyzerOutputKey, str) and CustomAnalyzerOutputKey
+            and (CustomAnalyzerOutputKind in ("str", "int")
+                 or (isinstance(CustomAnalyzerOutputKind, list) and CustomAnalyzerOutputKind
+                     and all(isinstance(CustomAnalyzerOutputChoice, str) for CustomAnalyzerOutputChoice in CustomAnalyzerOutputKind)))
+            for CustomAnalyzerOutputKey, CustomAnalyzerOutputKind in CustomAnalyzerOutputSchema.items())
+        if not CustomAnalyzerOutputKindsValid:
+            return "a custom analyzer's output schema maps every key to a list of strings, 'str' or 'int'"
+        if not isinstance(CustomAnalyzerReadsNonconversationalSocketFeed, bool):
+            return "whether a custom analyzer reads the nonconversational socket feeds is true or false"
+        return ""
+
+    def _InstantiateCustomAnalyzer(self, CustomAnalyzerName: str, CustomAnalyzerPrompt: str, CustomAnalyzerOutputSchema: dict,
+                                   CustomAnalyzerReadsNonconversationalSocketFeed: bool) -> None:
+        """Build the custom analyzer these four fields declare and keep it in ``CustomAnalyzerInstances`` under
+        ``CustomAnalyzerName``, and return ``None``. The declaration is
+        ``illocutionary_lifecycles.analyzers.AnalyzerBase.CustomAnalyzerDeclaration`` with a deep copy of the output
+        schema, the analyzer is built by ``illocutionary_lifecycles.analyzers.AnalyzerBase.InstantiateCustomAnalyzer``,
+        and its nonconversational socket feed is ``_NonconversationalSocketFeeds`` of this class, bound to this session.
+        This is the one place a custom analyzer is built, so one instantiated by ``SetAnalyzerInstance`` and one rebuilt
+        by ``RecoverInit`` from the record are built the same way. Called only by those two methods of this class."""
+        from illocutionary_lifecycles.analyzers.AnalyzerBase import CustomAnalyzerDeclaration, InstantiateCustomAnalyzer
+        self.CustomAnalyzerInstances[CustomAnalyzerName] = InstantiateCustomAnalyzer(
+            CustomAnalyzerDeclaration(
+                CustomAnalyzerName=CustomAnalyzerName,
+                CustomAnalyzerPrompt=CustomAnalyzerPrompt,
+                CustomAnalyzerOutputSchema=copy.deepcopy(CustomAnalyzerOutputSchema),
+                CustomAnalyzerReadsNonconversationalSocketFeed=bool(CustomAnalyzerReadsNonconversationalSocketFeed)),
+            self._NonconversationalSocketFeeds)
+
+    def _NonconversationalSocketFeeds(self) -> str:
+        """Return the nonconversational socket feeds the current conversation state shows, as one text, and write
+        nothing.
+
+        A nonconversational feed is the text a server keeps in a socket, a pragmatically useful description of something
+        neither the user nor the assistant said (for example what is on a screen, what the user just touched, captions or
+        narration, recent events with their times, what has been built so far, how much time has passed, or the server's
+        own summary of what happened earlier). It is always text the server has already written for the conversation,
+        never the source it describes, and the server replaces it whenever the source changes. Its form is the server's
+        choice, such as one sentence describing the present, a single line about what the user is focusing on, a short
+        list of recent events, lines of names and values, or nothing when there is nothing to show.
+
+        IL keeps no copy and no history of a feed. It reads whatever the feed says at the moment it is used, which is
+        when a reply is composed and, for a custom analyzer that reads socket feeds, each time that analyzer runs, so
+        anything earlier that should still count has to be written into the feed by the server. Without a socket reader,
+        the feed is the one text placed through ``SetNonconversationalContentSocket``. With a socket reader set through
+        ``illocutionary_lifecycles.core.session_provider.SessionProvider.SetNonconversationalSocketReader``, the reader is
+        called with the socket names the current state shows, from the pragmatic field
+        ``pNonconversationalSocketInstancesState``, and the texts it returns are joined one per line, empty ones left out,
+        in the order the reader returns them. That is what
+        ``illocutionary_lifecycles.core.turn_taking.ResponseProcessing.ComposeCurrentPrompt`` shows for a reply, so a custom
+        analyzer that reads the feeds sees what the reply sees. An empty string comes back for a session without a
+        pragmatic state and when nothing is shown, and an error the reader raises reaches the caller, as it does when a
+        reply is composed.
+
+        NOTE: This is an experimental feature, as ``SetAnalyzerInstance`` explains. The method is handed, bound to this
+        session, to every custom analyzer that ``_InstantiateCustomAnalyzer`` in this class builds, and is called only by
+        the custom analyzers that read socket feeds, each time they run."""
+        if self.PragmaticState is None:
+            return ""
+        if self.NonconversationalSocketReader is None:
+            return str(getattr(self.PragmaticState, "pNonconversationalContentSocketState", "") or "")
+        ShownNonconversationalSocketNames = list(
+            getattr(self.PragmaticState, "pNonconversationalSocketInstancesState", []) or [])
+        ShownNonconversationalSocketFeeds = self.NonconversationalSocketReader(ShownNonconversationalSocketNames) or {}
+        return "\n".join(str(ShownNonconversationalSocketFeed) for ShownNonconversationalSocketFeed
+                         in ShownNonconversationalSocketFeeds.values() if str(ShownNonconversationalSocketFeed or "").strip())
 
     def SetNonconversationalContentSocket(self, Content: str) -> bool:
         """Set the pragmatic field ``pNonconversationalContentSocketState`` to ``Content`` with surrounding spaces

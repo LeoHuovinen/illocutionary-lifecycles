@@ -277,9 +277,10 @@ class CustomAnalyzerInstantiationEvent(ConversationEvent):
     session starts, during an ongoing conversation session. Only use this feature if you are sure you need it, as
     ``illocutionary_lifecycles.analyzers.AnalyzerBase.CustomAnalyzerDeclaration`` explains.
 
-    ``CustomAnalyzerName``, ``CustomAnalyzerPrompt`` and ``CustomAnalyzerOutputSchema`` are the fields of the
-    instantiated ``CustomAnalyzerDeclaration``. ``CustomAnalyzerRemoved`` is true for a removal, which records the name
-    alone. ``illocutionary_lifecycles.core.system_state.system_state.SystemState.RecoverInit`` replays these events in
+    ``CustomAnalyzerName``, ``CustomAnalyzerPrompt``, ``CustomAnalyzerOutputSchema`` and
+    ``CustomAnalyzerReadsNonconversationalSocketFeed`` are the fields of the instantiated ``CustomAnalyzerDeclaration``,
+    the last one false in an event recorded before that field existed. ``CustomAnalyzerRemoved`` is true for a removal,
+    which records the name alone. ``illocutionary_lifecycles.core.system_state.system_state.SystemState.RecoverInit`` replays these events in
     order, so a reopened session has the same custom analyzers.
     """
 
@@ -288,6 +289,7 @@ class CustomAnalyzerInstantiationEvent(ConversationEvent):
     CustomAnalyzerName: str = ""
     CustomAnalyzerPrompt: str = ""
     CustomAnalyzerOutputSchema: Any = None
+    CustomAnalyzerReadsNonconversationalSocketFeed: bool = False
     CustomAnalyzerRemoved: bool = False
 
 
@@ -540,14 +542,16 @@ class Memory:
 
     def UpsertCustomAnalyzerInstantiationEvent(self, CustomAnalyzerName: str, CustomAnalyzerPrompt: str = "",
                                                CustomAnalyzerOutputSchema: Any = None,
-                                               CustomAnalyzerRemoved: bool = False) -> int:
+                                               CustomAnalyzerRemoved: bool = False,
+                                               CustomAnalyzerReadsNonconversationalSocketFeed: bool = False) -> int:
         """Record one ``CustomAnalyzerInstantiationEvent`` with these fields, copying
         ``CustomAnalyzerOutputSchema`` deeply, under a refresh index of its own, write it to the vendor at once, and return that
-        index. Called by ``SessionProvider.SetAnalyzerInstance`` and ``SessionProvider.RemoveAnalyzerInstance`` before
+        index. Called only by ``SystemState.SetAnalyzerInstance`` and ``SystemState.RemoveAnalyzerInstance``, before
         the change takes effect."""
         RecordedInstantiationEvent = CustomAnalyzerInstantiationEvent(
             CustomAnalyzerName=str(CustomAnalyzerName), CustomAnalyzerPrompt=str(CustomAnalyzerPrompt or ""),
             CustomAnalyzerOutputSchema=copy.deepcopy(CustomAnalyzerOutputSchema),
+            CustomAnalyzerReadsNonconversationalSocketFeed=bool(CustomAnalyzerReadsNonconversationalSocketFeed),
             CustomAnalyzerRemoved=bool(CustomAnalyzerRemoved))
         RecordedInstantiationEventIdx = self._next_refresh_idx
         RecordedInstantiationEvent.event_refresh_idx = RecordedInstantiationEventIdx

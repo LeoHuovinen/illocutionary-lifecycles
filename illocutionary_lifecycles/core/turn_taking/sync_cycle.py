@@ -198,7 +198,7 @@ async def SyncCycle(
         return {"ConversationStateAdvanced": False}
 
     ActiveIds = getattr(PragmaticState, "pActiveAnalyzersState", None) or []
-    # A custom analyzer instantiated for this session, as ``SessionProvider.SetAnalyzerInstance`` explains, is found
+    # A custom analyzer instantiated for this session, as ``SystemState.SetAnalyzerInstance`` explains, is found
     # by its name before the registered analyzers, and is then run exactly like them.
     CustomAnalyzerInstances = getattr(SystemState, "CustomAnalyzerInstances", None) or {}
     Resolved = [(AnalyzerId, CustomAnalyzerInstances.get(AnalyzerId) or GetAnalyzer(AnalyzerId))
